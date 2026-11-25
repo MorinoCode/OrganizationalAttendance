@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("api", {
   attendance: {
     today: data => invoke("attendance:today", data),
     list: (data, token) => invoke("attendance:list", data, token),
+    page: (data, token) => invoke("attendance:page", data, token),
     punchIn: data => invoke("attendance:punch-in", data),
     startBreak: data => invoke("attendance:start-break", data),
     endBreak: data => invoke("attendance:end-break", data),
@@ -53,6 +54,7 @@ contextBridge.exposeInMainWorld("api", {
   },
   payslips: {
     list: (data, token) => invoke("payslips:list", data, token),
+    page: (data, token) => invoke("payslips:page", data, token),
     save: (data, token) => invoke("payslips:save", data, token),
     setSigned: (data, token) => invoke("payslips:set-signed", data, token),
     remove: (data, token) => invoke("payslips:delete", data, token)
@@ -71,6 +73,16 @@ contextBridge.exposeInMainWorld("api", {
   print: {
     payslip: token => invoke("print:payslip", {}, token),
     payslipPdf: token => invoke("print:payslip-pdf", {}, token)
+  },
+  exporter: {
+    attendance: (data, token) => invoke("export:attendance", data, token),
+    payslips: (data, token) => invoke("export:payslips", data, token),
+    cancel: (id, token) => invoke("export:cancel", { id }, token),
+    onProgress: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on("export:progress", listener)
+      return () => ipcRenderer.removeListener("export:progress", listener)
+    }
   },
   updater: {
     check: () => invoke("updater:check"),

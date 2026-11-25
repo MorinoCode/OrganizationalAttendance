@@ -484,7 +484,7 @@ describe("schema migrations", () => {
       .map((column: { name: string }) => column.name)
     expect(columns).toContain("late_minutes")
     expect(columns).toContain("early_leave_minutes")
-    expect(schema.SCHEMA_VERSION).toBe(3)
+    expect(schema.SCHEMA_VERSION).toBe(4)
 
     database.closeDatabase()
     fs.rmSync(dir, { recursive: true, force: true })
@@ -532,6 +532,179 @@ describe("backup validation", () => {
         }),
       "backup_invalid"
     )
+  })
+})
+
+describe("scale and uniqueness", () => {
+  it("rejects a duplicate payslip even when the friendly pre-check is bypassed", () => {
+    const employee = seedEmployee()
+    repositories.savePayslip(
+      { employeeId: employee.id, periodStart: "2026-11-01", periodEnd: "2026-11-30", baseSalaryMinor: 100_000 },
+      "admin"
+    )
+
+    const db = database.getDb() as unknown as { prepare: (sql: string) => { run: (...params: unknown[]) => unknown } }
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO payslips (id, number, employee_id, employee_name, employee_code, salary_type, base_rate_minor, period_start, period_end, created_at, updated_at)
+           VALUES ('ps-raw', 'PS-2026-9000', ?, 'Ali Hassan', 'KW-100', 'hourly', 0, '2026-11-01', '2026-11-30', '2026-11-30T00:00:00.000Z', '2026-11-30T00:00:00.000Z')`
+        )
+        .run(employee.id)
+    ).toThrow(/UNIQUE/)
+    expect(repositories.listPayslips()).toHaveLength(1)
+  })
+
+  it("pages attendance rows but aggregates the whole range", () => {
+    const employee = seedEmployee()
+    for (let day = 1; day <= 12; day += 1) {
+      const start = new Date(2026, 9, day, 8, 0, 0).getTime()
+      repositories.punchIn(employee.id, { now: start })
+      repositories.punchOut(employee.id, { now: start + 8 * HOUR })
+    }
+
+    const first = repositories.attendancePage({
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      page: 1,
+      pageSize: 5
+    })
+    expect(first.total).toBe(12)
+    expect(first.rows).toHaveLength(5)
+    expect(first.page).toBe(1)
+
+    const last = repositories.attendancePage({
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      page: 3,
+      pageSize: 5
+    })
+    expect(last.rows).toHaveLength(2)
+
+    const summary = repositories.aggregateAttendance({
+      fromDate: "2026-10-01",
+      toDate: "2026-10-31",
+      dailyHours: 8
+    })
+    expect(summary.workedDays).toBe(12)
+    expect(summary.workedMinutes).toBe(12 * 8 * 60)
+    expect(summary.overtimeMinutes).toBe(0)
+    expect(summary.openRecords).toBe(0)
+    expect(summary.totalRecords).toBe(12)
+    expect(summary.firstDate).toBe("2026-10-01")
+    expect(summary.lastDate).toBe("2026-10-12")
+  })
+
+  it("counts an open shift apart from worked days in the aggregate", () => {
+    const employee = seedEmployee()
+    const start = new Date(2026, 9, 5, 8, 0, 0).getTime()
+    repositories.punchIn(employee.id, { now: start })
+    repositories.punchOut(employee.id, { now: start + 9 * HOUR })
+    repositories.punchIn(employee.id, { now: new Date(2026, 9, 6, 8, 0, 0).getTime() })
+
+    const summary = repositories.aggregateAttendance({ fromDate: "2026-10-01", toDate: "2026-10-31", dailyHours: 8 })
+    expect(summary.workedDays).toBe(1)
+    expect(summary.openRecords).toBe(1)
+    expect(summary.overtimeMinutes).toBe(60)
+  })
+
+  it("pages payslips with an exact total", () => {
+    const employee = seedEmployee()
+    for (let month = 1; month <= 6; month += 1) {
+      const suffix = String(month).padStart(2, "0")
+      repositories.savePayslip(
+        {
+          employeeId: employee.id,
+          periodStart: `2026-${suffix}-01`,
+          periodEnd: `2026-${suffix}-28`,
+          baseSalaryMinor: 1_000
+        },
+        "admin"
+      )
+    }
+
+    const page = repositories.payslipsPage({ page: 2, pageSize: 4 })
+    expect(page.total).toBe(6)
+    expect(page.rows).toHaveLength(2)
+    expect(page.page).toBe(2)
+    expect(repositories.countPayslips()).toBe(6)
+  })
+
+  it("deduplicates legacy payslips before creating the unique index", () => {
+    const fs = require("node:fs") as typeof import("node:fs")
+    const os = require("node:os") as typeof import("node:os")
+    const nodePath = require("node:path") as typeof import("node:path")
+    const schema = require("../src/main/db/schema.cjs") as {
+      MIGRATIONS: Array<{ version: number; sql: string }>
+    }
+    const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite")
+
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "hozor-unique-"))
+    const file = nodePath.join(dir, "legacy4.db")
+
+    const legacy = new DatabaseSync(file)
+    for (const migration of schema.MIGRATIONS) {
+      if (migration.version > 3) continue
+      legacy.exec(migration.sql)
+    }
+    const insert = legacy.prepare(
+      `INSERT INTO payslips (id, number, employee_id, employee_name, employee_code, salary_type, base_rate_minor, period_start, period_end, created_at, updated_at)
+       VALUES (?, ?, 'emp-1', 'Ali Hassan', 'KW-100', 'hourly', 0, '2026-11-01', '2026-11-30', ?, ?)`
+    )
+    insert.run("ps-old", "PS-2026-0001", "2026-11-30T00:00:00.000Z", "2026-11-30T00:00:00.000Z")
+    insert.run("ps-new", "PS-2026-0002", "2026-12-02T00:00:00.000Z", "2026-12-05T00:00:00.000Z")
+    legacy.exec("PRAGMA user_version = 3")
+    legacy.close()
+
+    database.closeDatabase()
+    database.initDatabaseFromFile(file)
+
+    const slips = repositories.listPayslips()
+    expect(slips).toHaveLength(1)
+    expect(slips[0].id).toBe("ps-new")
+    const [log] = repositories.listAuditLogs(5)
+    expect(log.action).toBe("deleted")
+    expect(JSON.parse(log.details).reason).toBe("duplicate_period")
+
+    const db = database.getDb() as unknown as { prepare: (sql: string) => { run: (...params: unknown[]) => unknown } }
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO payslips (id, number, employee_id, employee_name, employee_code, salary_type, base_rate_minor, period_start, period_end, created_at, updated_at)
+           VALUES ('ps-3', 'PS-2026-0003', 'emp-1', 'Ali Hassan', 'KW-100', 'hourly', 0, '2026-11-01', '2026-11-30', '2026-12-09T00:00:00.000Z', '2026-12-09T00:00:00.000Z')`
+        )
+        .run()
+    ).toThrow(/UNIQUE/)
+
+    database.closeDatabase()
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it("restores a legacy backup that holds duplicate periods", () => {
+    const employee = seedEmployee()
+    const payload = backup.buildBackup()
+    const base = {
+      employeeId: employee.id,
+      employeeName: employee.fullName,
+      employeeCode: employee.employeeCode,
+      salaryType: "hourly",
+      baseRateMinor: 0,
+      periodStart: "2026-11-01",
+      periodEnd: "2026-11-30"
+    }
+    payload.data.payslips = [
+      { ...base, id: "ps-a", number: "PS-2026-0001", createdAt: "2026-11-01T00:00:00.000Z" },
+      { ...base, id: "ps-b", number: "PS-2026-0002", createdAt: "2026-11-05T00:00:00.000Z" }
+    ]
+
+    const result = repositories.importAll(backup.validateBackup(payload), "admin")
+    expect(result.skippedPayslips).toBe(1)
+    const slips = repositories.listPayslips()
+    expect(slips).toHaveLength(1)
+    expect(slips[0].id).toBe("ps-b")
+    const [log] = repositories.listAuditLogs(5)
+    expect(log.action).toBe("restored")
+    expect(JSON.parse(log.details).skippedPayslips).toBe(1)
   })
 })
 

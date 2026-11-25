@@ -9,8 +9,12 @@ import {
   BackupStatus,
   CompanySettings,
   Employee,
+  ExcelExportSpec,
+  ExportProgress,
+  ExportResult,
   LeaveRecord,
   MonthCloseReport,
+  PagedResult,
   Payslip,
   PublicEmployee,
   RestoreSnapshotResult
@@ -56,6 +60,7 @@ interface Bridge {
   attendance: {
     today(data?: { employeeId?: string }): Promise<Envelope<AttendanceRecord[]>>
     list(data: Record<string, unknown>, token: string | null): Promise<Envelope<AttendanceRecord[]>>
+    page(data: Record<string, unknown>, token: string | null): Promise<Envelope<PagedResult<AttendanceRecord>>>
     punchIn(data: { employeeId: string }): Promise<Envelope<AttendanceRecord>>
     startBreak(data: { employeeId: string }): Promise<Envelope<AttendanceRecord>>
     endBreak(data: { employeeId: string }): Promise<Envelope<AttendanceRecord>>
@@ -75,6 +80,7 @@ interface Bridge {
   }
   payslips: {
     list(data: Record<string, unknown>, token: string | null): Promise<Envelope<Payslip[]>>
+    page(data: Record<string, unknown>, token: string | null): Promise<Envelope<PagedResult<Payslip>>>
     save(data: Record<string, unknown>, token: string | null): Promise<Envelope<Payslip>>
     setSigned(data: { id: string; isSigned: boolean }, token: string | null): Promise<Envelope<Payslip>>
     remove(data: { id: string }, token: string | null): Promise<Envelope<{ id: string }>>
@@ -94,6 +100,18 @@ interface Bridge {
   print: {
     payslip(token: string | null): Promise<Envelope<{ success: boolean; reason: string | null }>>
     payslipPdf(token: string | null): Promise<Envelope<{ canceled: boolean; filePath?: string }>>
+  }
+  exporter: {
+    attendance(
+      data: { id: string; filter: Record<string, unknown>; spec: ExcelExportSpec },
+      token: string | null
+    ): Promise<Envelope<ExportResult>>
+    payslips(
+      data: { id: string; filter: Record<string, unknown>; spec: ExcelExportSpec },
+      token: string | null
+    ): Promise<Envelope<ExportResult>>
+    cancel(id: string, token: string | null): Promise<Envelope<{ canceled: boolean }>>
+    onProgress(callback: (progress: ExportProgress) => void): () => void
   }
   updater: {
     check(): Promise<Envelope<{ status: string; version: string | null; currentVersion?: string; percent?: number; error?: string | null }>>
@@ -174,6 +192,7 @@ export const api = {
   attendance: {
     today: (employeeId?: string) => unwrap(bridge().attendance.today({ employeeId })),
     list: (filter: Record<string, unknown> = {}) => unwrap(bridge().attendance.list(filter, sessionToken)),
+    page: (filter: Record<string, unknown> = {}) => unwrap(bridge().attendance.page(filter, sessionToken)),
     punchIn: (employeeId: string) => unwrap(bridge().attendance.punchIn({ employeeId })),
     startBreak: (employeeId: string) => unwrap(bridge().attendance.startBreak({ employeeId })),
     endBreak: (employeeId: string) => unwrap(bridge().attendance.endBreak({ employeeId })),
@@ -197,6 +216,7 @@ export const api = {
   },
   payslips: {
     list: (filter: Record<string, unknown> = {}) => unwrap(bridge().payslips.list(filter, sessionToken)),
+    page: (filter: Record<string, unknown> = {}) => unwrap(bridge().payslips.page(filter, sessionToken)),
     save: (data: Record<string, unknown>) => unwrap(bridge().payslips.save(data, sessionToken)),
     setSigned: (id: string, isSigned: boolean) => unwrap(bridge().payslips.setSigned({ id, isSigned }, sessionToken)),
     remove: (id: string) => unwrap(bridge().payslips.remove({ id }, sessionToken))
@@ -219,6 +239,14 @@ export const api = {
   print: {
     payslip: () => unwrap(bridge().print.payslip(sessionToken)),
     payslipPdf: () => unwrap(bridge().print.payslipPdf(sessionToken))
+  },
+  exporter: {
+    attendance: (id: string, filter: Record<string, unknown>, spec: ExcelExportSpec) =>
+      unwrap(bridge().exporter.attendance({ id, filter, spec }, sessionToken)),
+    payslips: (id: string, filter: Record<string, unknown>, spec: ExcelExportSpec) =>
+      unwrap(bridge().exporter.payslips({ id, filter, spec }, sessionToken)),
+    cancel: (id: string) => unwrap(bridge().exporter.cancel(id, sessionToken)),
+    onProgress: (callback: (progress: ExportProgress) => void) => bridge().exporter.onProgress(callback)
   },
   updater: {
     check: () => unwrap(bridge().updater.check()),

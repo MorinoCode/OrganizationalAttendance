@@ -5,7 +5,7 @@ const fs = require("node:fs")
 const { app, BrowserWindow, dialog, session, shell } = require("electron")
 
 const { initDatabase, closeDatabase, getDatabasePath } = require("./db/index.cjs")
-const { registerIpcHandlers } = require("./ipc.cjs")
+const { registerIpcHandlers, cancelActiveExports, discardActiveExports } = require("./ipc.cjs")
 const { initUpdater } = require("./updater.cjs")
 const backupScheduler = require("./backupScheduler.cjs")
 const { toErrorPayload } = require("./lib/errors.cjs")
@@ -120,9 +120,13 @@ if (!gotSingleInstanceLock) {
     })
   })
 
-  app.on("before-quit", backupScheduler.onQuit)
+  app.on("before-quit", () => {
+    cancelActiveExports()
+    backupScheduler.onQuit()
+  })
 
   app.on("will-quit", () => {
+    discardActiveExports()
     backupScheduler.stop()
     closeDatabase()
   })

@@ -1,7 +1,7 @@
 "use strict"
 
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS company_settings (
@@ -195,10 +195,52 @@ ALTER TABLE attendance_records ADD COLUMN early_leave_minutes INTEGER NOT NULL D
 CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records (status);
 `
 
+const MIGRATION_V4 = `
+-- Payroll rule: one payslip per employee per period. Older databases could hold duplicates,
+-- so the migration keeps the most recently updated row of each group and records every
+-- removed row in the audit log (nothing disappears silently).
+INSERT INTO audit_logs (at, actor, entity, entity_id, action, details)
+SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'system', 'payslip', p.id, 'deleted',
+       '{"reason":"duplicate_period","schemaMigration":4,"keptId":"' || k.keep_id || '"}'
+FROM payslips p
+JOIN (
+  SELECT g.employee_id, g.period_start, g.period_end,
+         (SELECT x.id FROM payslips x
+           WHERE x.employee_id = g.employee_id
+             AND x.period_start = g.period_start
+             AND x.period_end = g.period_end
+           ORDER BY COALESCE(NULLIF(x.updated_at, ''), x.created_at) DESC, x.id DESC
+           LIMIT 1) AS keep_id
+  FROM (SELECT DISTINCT employee_id, period_start, period_end FROM payslips) g
+) k
+  ON k.employee_id = p.employee_id
+ AND k.period_start = p.period_start
+ AND k.period_end = p.period_end
+WHERE p.id <> k.keep_id;
+
+DELETE FROM payslips WHERE id IN (
+  SELECT p.id FROM payslips p
+  WHERE EXISTS (
+    SELECT 1 FROM payslips q
+    WHERE q.employee_id = p.employee_id
+      AND q.period_start = p.period_start
+      AND q.period_end = p.period_end
+      AND (
+        COALESCE(NULLIF(q.updated_at, ''), q.created_at) > COALESCE(NULLIF(p.updated_at, ''), p.created_at)
+        OR (COALESCE(NULLIF(q.updated_at, ''), q.created_at) = COALESCE(NULLIF(p.updated_at, ''), p.created_at) AND q.id > p.id)
+      )
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payslips_employee_period
+  ON payslips (employee_id, period_start, period_end);
+`
+
 const MIGRATIONS = [
   { version: 1, sql: MIGRATION_V1 },
   { version: 2, sql: MIGRATION_V2 },
-  { version: 3, sql: MIGRATION_V3 }
+  { version: 3, sql: MIGRATION_V3 },
+  { version: 4, sql: MIGRATION_V4 }
 ]
 
 function getUserVersion(db) {

@@ -195,6 +195,15 @@ function autoBackupPath(fileName) {
   return fullPath
 }
 
+function removeSidecars(filePath) {
+  for (const suffix of ["-wal", "-shm"]) {
+    try {
+      fs.rmSync(`${filePath}${suffix}`, { force: true })
+    } catch {
+    }
+  }
+}
+
 function verifyDatabaseFile(filePath) {
   let handle = null
   try {
@@ -209,6 +218,7 @@ function verifyDatabaseFile(filePath) {
       handle?.close()
     } catch {
     }
+    removeSidecars(filePath)
   }
 }
 
@@ -266,6 +276,7 @@ function pruneAutoBackups(keep = AUTO_BACKUP_KEEP) {
       fs.unlinkSync(entry.path)
     } catch {
     }
+    removeSidecars(entry.path)
     try {
       fs.unlinkSync(autoBackupMetaPath(entry.fileName))
     } catch {

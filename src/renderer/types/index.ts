@@ -118,8 +118,52 @@ export interface AttendanceSummary {
   breakMinutes: number
   overtimeMinutes: number
   openRecords: number
+  totalRecords?: number
   firstDate: string | null
   lastDate: string | null
+}
+
+export interface ExportProgress {
+  id: string
+  written: number
+  total: number
+}
+
+export interface ExportResult {
+  canceled: boolean
+  filePath?: string
+  rows?: number
+  total?: number
+  durationMs?: number
+}
+
+export interface ExcelExportSpec {
+  creator: string
+  sheetName: string
+  rtl: boolean
+  title: string
+  subtitle?: string
+  headers: string[]
+  headerRowIndex: number
+  widths: number[]
+  locale: string
+  fileName: string
+  totalLabel: string
+  showEmployee?: boolean
+  statusLabels?: Record<string, string>
+  paymentMethodLabels?: Record<string, string>
+  signedLabel?: string
+  unsignedLabel?: string
+  summaryLabel?: string
+  currency?: string
+  decimals?: number
+}
+
+export interface PagedResult<T> {
+  rows: T[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface MonthCloseEmployee {

@@ -77,12 +77,17 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
 
   const handleExport = async () => {
     try {
-      await exportAttendanceExcel(records, settings, {
-        title: `${settings.companyName} — ${t("employees.employeeReportTitle")}`,
-        fromDate,
-        toDate,
-        employee
-      })
+      await exportAttendanceExcel(
+        { employeeId: employee.id, fromDate, toDate },
+        settings,
+        {
+          id: crypto.randomUUID(),
+          title: `${settings.companyName} — ${t("employees.employeeReportTitle")}`,
+          fromDate,
+          toDate,
+          employee
+        }
+      )
     } catch (caught) {
       setError(t(errorKey(caught)))
     }

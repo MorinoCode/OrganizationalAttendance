@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
   BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   FileSpreadsheet,
   FileText,
@@ -66,6 +68,7 @@ interface PayrollFormState {
 }
 
 const PAYMENT_METHODS: PaymentMethod[] = ["bank_transfer", "cash", "knet", "cheque"]
+const ARCHIVE_PAGE_SIZE = 20
 
 const EMPTY_SUMMARY: AttendanceSummary = {
   workedDays: 0,
@@ -84,6 +87,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [payslips, setPayslips] = useState<Payslip[]>([])
+  const [archivePage, setArchivePage] = useState(1)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [filterEmployeeId, setFilterEmployeeId] = useState("")
@@ -95,6 +99,19 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<Payslip | null>(null)
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState<{ id: string; written: number; total: number } | null>(null)
+  const exportIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    try {
+      return api.exporter.onProgress(progress => {
+        if (exportIdRef.current === progress.id) setExportProgress(progress)
+      })
+    } catch {
+      return undefined
+    }
+  }, [])
 
   const handleError = useCallback(
     (caught: unknown) => {
@@ -136,6 +153,20 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
         .includes(term)
     })
   }, [payslips, query, filterEmployeeId])
+
+  const archivePages = Math.max(1, Math.ceil(filteredPayslips.length / ARCHIVE_PAGE_SIZE))
+  const pagedPayslips = filteredPayslips.slice(
+    (archivePage - 1) * ARCHIVE_PAGE_SIZE,
+    archivePage * ARCHIVE_PAGE_SIZE
+  )
+
+  useEffect(() => {
+    setArchivePage(1)
+  }, [query, filterEmployeeId])
+
+  useEffect(() => {
+    if (archivePage > archivePages) setArchivePage(archivePages)
+  }, [archivePage, archivePages])
 
   const selectedPayslip = payslips.find(slip => slip.id === selectedId) ?? null
 
@@ -317,8 +348,34 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
   }
 
   const handleExportLedger = async () => {
+    const id = crypto.randomUUID()
+    exportIdRef.current = id
+    setExportProgress({ id, written: 0, total: filteredPayslips.length })
+    setExporting(true)
     try {
-      await exportPayslipsExcel(filteredPayslips, settings)
+      const result = await exportPayslipsExcel(
+        { employeeId: filterEmployeeId || undefined, search: query.trim() || undefined },
+        settings,
+        { id }
+      )
+      if (result.canceled) {
+        setFeedback({ tone: "info", message: t("common.exportCanceled") })
+      } else {
+        setFeedback({ tone: "success", message: t("common.exportSaved", { path: result.filePath }) })
+      }
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      exportIdRef.current = null
+      setExportProgress(null)
+      setExporting(false)
+    }
+  }
+
+  const handleCancelExport = async () => {
+    if (!exportIdRef.current) return
+    try {
+      await api.exporter.cancel(exportIdRef.current)
     } catch (caught) {
       handleError(caught)
     }
@@ -377,8 +434,8 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={handleExportLedger}
-            disabled={filteredPayslips.length === 0}
+            onClick={() => void handleExportLedger()}
+            disabled={filteredPayslips.length === 0 || exporting}
             className="btn border border-[rgba(70,195,159,0.4)] bg-[rgba(43,166,136,0.18)] text-[#78dcbc] hover:bg-[rgba(43,166,136,0.3)]"
           >
             <FileSpreadsheet className="h-4 w-4" aria-hidden />
@@ -431,6 +488,21 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
         </div>
       </div>
 
+      {exporting && (
+        <div className="panel flex flex-wrap items-center justify-between gap-3 px-6 py-3 text-xs text-[#e6c98a] no-print">
+          <span className="flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            {t("common.exporting", {
+              written: exportProgress?.written ?? 0,
+              total: exportProgress?.total || filteredPayslips.length
+            })}
+          </span>
+          <button type="button" onClick={() => void handleCancelExport()} className="btn btn-ghost px-2.5 py-1 text-[11px]">
+            <span>{t("common.cancelExport")}</span>
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         <div className="panel flex h-[780px] flex-col gap-3 p-5 no-print lg:col-span-4">
           <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
@@ -470,6 +542,32 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
             </select>
           </div>
 
+          {archivePages > 1 && (
+            <div className="flex items-center justify-between text-[0.68rem] text-[#8d8275]">
+              <span>{t("common.pageOf", { page: archivePage, pages: archivePages })}</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setArchivePage(current => Math.max(1, current - 1))}
+                  disabled={archivePage <= 1}
+                  className="rounded-md border border-[color:var(--line)] bg-[rgba(255,246,230,0.03)] p-1 text-[#9d9182] transition-colors hover:bg-[rgba(255,246,230,0.08)] disabled:opacity-40"
+                  aria-label={t("common.prevPage")}
+                >
+                  <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setArchivePage(current => Math.min(archivePages, current + 1))}
+                  disabled={archivePage >= archivePages}
+                  className="rounded-md border border-[color:var(--line)] bg-[rgba(255,246,230,0.03)] p-1 text-[#9d9182] transition-colors hover:bg-[rgba(255,246,230,0.08)] disabled:opacity-40"
+                  aria-label={t("common.nextPage")}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="custom-scrollbar flex-1 space-y-2.5 overflow-y-auto pe-1">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-400">
@@ -482,7 +580,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                 <p>{t("payroll.emptyArchive")}</p>
               </div>
             ) : (
-              filteredPayslips.map(slip => {
+              pagedPayslips.map(slip => {
                 const isSelected = selectedId === slip.id
                 return (
                   <div

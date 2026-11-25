@@ -433,7 +433,7 @@ function breaksFor(db, attendanceIds) {
   return grouped
 }
 
-function attendanceQuery(db, { employeeId, fromDate, toDate } = {}) {
+function attendanceWhere({ employeeId, fromDate, toDate } = {}) {
   const clauses = []
   const params = []
   if (employeeId) {
@@ -448,7 +448,29 @@ function attendanceQuery(db, { employeeId, fromDate, toDate } = {}) {
     clauses.push("a.record_date <= ?")
     params.push(assertDateKey(toDate, "invalid_date"))
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params }
+}
+
+const ATTENDANCE_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 200
+
+function resolvePage({ page, pageSize, limit, offset } = {}, fallbackSize = ATTENDANCE_PAGE_SIZE) {
+  const size = toInteger(pageSize ?? limit, { min: 1, max: MAX_PAGE_SIZE, fallback: fallbackSize })
+  const pageNumber = toInteger(page, { min: 1, max: 1_000_000, fallback: 1 })
+  const skip = toInteger(offset !== undefined ? offset : (pageNumber - 1) * size, {
+    min: 0,
+    max: 100_000_000,
+    fallback: 0
+  })
+  return { limit: size, offset: skip, page: Math.floor(skip / size) + 1, pageSize: size }
+}
+
+function attendanceQuery(db, filter = {}) {
+  const { employeeId, fromDate, toDate, page, pageSize, limit, offset } = filter
+  const { where, params } = attendanceWhere({ employeeId, fromDate, toDate })
+  const paged = page !== undefined || pageSize !== undefined || limit !== undefined || offset !== undefined
+  const paging = paged ? resolvePage({ page, pageSize, limit, offset }) : null
+
   const rows = db
     .prepare(`
       SELECT a.*, e.full_name AS employee_name
@@ -456,8 +478,9 @@ function attendanceQuery(db, { employeeId, fromDate, toDate } = {}) {
       JOIN employees e ON e.id = a.employee_id
       ${where}
       ORDER BY a.record_date DESC, a.punch_in_at DESC
+      ${paging ? "LIMIT ? OFFSET ?" : ""}
     `)
-    .all(...params)
+    .all(...params, ...(paging ? [paging.limit, paging.offset] : []))
 
   const breaks = breaksFor(db, rows.map(row => row.id))
   const now = Date.now()
@@ -466,6 +489,29 @@ function attendanceQuery(db, { employeeId, fromDate, toDate } = {}) {
 
 function listAttendance(filter = {}) {
   return attendanceQuery(getDb(), filter)
+}
+
+function countAttendance(filter = {}) {
+  const { where, params } = attendanceWhere(filter)
+  const row = getDb()
+    .prepare(`
+      SELECT COUNT(*) AS total
+      FROM attendance_records a
+      JOIN employees e ON e.id = a.employee_id
+      ${where}
+    `)
+    .get(...params)
+  return Number(row?.total ?? 0)
+}
+
+function attendancePage(filter = {}, { withCount = true } = {}) {
+  const paging = resolvePage(filter)
+  return {
+    rows: attendanceQuery(getDb(), { ...filter, ...paging }),
+    total: withCount ? countAttendance(filter) : null,
+    page: paging.page,
+    pageSize: paging.pageSize
+  }
 }
 
 function todayRecords(employeeId) {
@@ -740,30 +786,35 @@ function deleteAttendance(recordId, actor) {
 }
 
 function aggregateAttendance({ employeeId, fromDate, toDate, dailyHours = 8 } = {}) {
-  const rows = listAttendance({ employeeId, fromDate, toDate })
-  const closed = rows.filter(row => row.punchOutAt !== null)
-  const open = rows.filter(row => row.punchOutAt === null)
+  const { where, params } = attendanceWhere({ employeeId, fromDate, toDate })
+  const contracted = Math.max(0, Math.round((Number(dailyHours) || 0) * 60))
 
-  let workedMinutes = 0
-  let breakMinutes = 0
-  let overtimeMinutes = 0
-
-  for (const row of closed) {
-    workedMinutes += row.netMinutes
-    breakMinutes += row.breakMinutes
-    overtimeMinutes += time.overtimeMinutesForDay(row.netMinutes, dailyHours)
-  }
-
-  const dates = rows.map(row => row.recordDate).sort()
+  const row = getDb()
+    .prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN 1 ELSE 0 END) AS worked_days,
+        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.net_minutes ELSE 0 END) AS worked_minutes,
+        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.break_minutes ELSE 0 END) AS break_minutes,
+        SUM(CASE WHEN a.punch_out_at IS NOT NULL AND a.net_minutes > ? THEN a.net_minutes - ? ELSE 0 END) AS overtime_minutes,
+        SUM(CASE WHEN a.punch_in_at IS NOT NULL AND a.punch_out_at IS NULL THEN 1 ELSE 0 END) AS open_records,
+        MIN(a.record_date) AS first_date,
+        MAX(a.record_date) AS last_date
+      FROM attendance_records a
+      JOIN employees e ON e.id = a.employee_id
+      ${where}
+    `)
+    .get(contracted, contracted, ...params)
 
   return {
-    workedDays: closed.length,
-    workedMinutes,
-    breakMinutes,
-    overtimeMinutes,
-    openRecords: open.length,
-    firstDate: dates[0] ?? null,
-    lastDate: dates[dates.length - 1] ?? null
+    workedDays: Number(row?.worked_days ?? 0),
+    workedMinutes: Number(row?.worked_minutes ?? 0),
+    breakMinutes: Number(row?.break_minutes ?? 0),
+    overtimeMinutes: Number(row?.overtime_minutes ?? 0),
+    openRecords: Number(row?.open_records ?? 0),
+    totalRecords: Number(row?.total ?? 0),
+    firstDate: row?.first_date ?? null,
+    lastDate: row?.last_date ?? null
   }
 }
 
@@ -855,9 +906,17 @@ function unpaidLeaveDaysInRange(employeeId, fromDate, toDate) {
 }
 
 
-function payslipQuery(db, { employeeId, fromDate, toDate } = {}) {
+function payslipWhere({ employeeId, fromDate, toDate, search } = {}) {
   const clauses = []
   const params = []
+  const term = typeof search === "string" ? search.trim() : ""
+  if (term) {
+    const like = `%${term.replace(/[%_\\]/g, match => `\\${match}`)}%`
+    clauses.push(
+      "(number LIKE ? ESCAPE '\\' OR employee_name LIKE ? ESCAPE '\\' OR employee_code LIKE ? ESCAPE '\\' OR period_start LIKE ? ESCAPE '\\' OR period_end LIKE ? ESCAPE '\\')"
+    )
+    params.push(like, like, like, like, like)
+  }
   if (employeeId) {
     clauses.push("employee_id = ?")
     params.push(String(employeeId))
@@ -870,15 +929,39 @@ function payslipQuery(db, { employeeId, fromDate, toDate } = {}) {
     clauses.push("period_start <= ?")
     params.push(assertDateKey(toDate, "invalid_date"))
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params }
+}
+
+function payslipQuery(db, filter = {}) {
+  const { employeeId, fromDate, toDate, search, page, pageSize, limit, offset } = filter
+  const { where, params } = payslipWhere({ employeeId, fromDate, toDate, search })
+  const paged = page !== undefined || pageSize !== undefined || limit !== undefined || offset !== undefined
+  const paging = paged ? resolvePage({ page, pageSize, limit, offset }) : null
   return db
-    .prepare(`SELECT * FROM payslips ${where} ORDER BY period_end DESC, created_at DESC`)
-    .all(...params)
+    .prepare(
+      `SELECT * FROM payslips ${where} ORDER BY period_end DESC, created_at DESC ${paging ? "LIMIT ? OFFSET ?" : ""}`
+    )
+    .all(...params, ...(paging ? [paging.limit, paging.offset] : []))
     .map(mapPayslip)
 }
 
 function listPayslips(filter = {}) {
   return payslipQuery(getDb(), filter)
+}
+
+function countPayslips(filter = {}) {
+  const { where, params } = payslipWhere(filter)
+  return Number(getDb().prepare(`SELECT COUNT(*) AS total FROM payslips ${where}`).get(...params)?.total ?? 0)
+}
+
+function payslipsPage(filter = {}, { withCount = true } = {}) {
+  const paging = resolvePage(filter)
+  return {
+    rows: payslipQuery(getDb(), { ...filter, ...paging }),
+    total: withCount ? countPayslips(filter) : null,
+    page: paging.page,
+    pageSize: paging.pageSize
+  }
 }
 
 function nextPayslipNumber(db, year) {
@@ -955,14 +1038,16 @@ function savePayslip(input = {}, actor) {
 
     const id = newId("ps")
     const number = nextPayslipNumber(db, Number(periodEnd.slice(0, 4)))
-    db.prepare(`
+    const insert = db.prepare(`
       INSERT INTO payslips (
         id, number, employee_id, employee_name, employee_code, department, salary_type, base_rate_minor,
         period_start, period_end, worked_days, worked_minutes, break_minutes, overtime_minutes, unpaid_leave_days,
         base_salary_minor, overtime_amount_minor, bonuses_minor, deductions_minor, net_amount_minor,
         payment_date, payment_method, notes, is_signed, signed_at, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)
-    `).run(
+    `)
+    const createdAt = nowIso()
+    const insertArgs = [
       id,
       number,
       employee.id,
@@ -986,9 +1071,18 @@ function savePayslip(input = {}, actor) {
       paymentDate,
       paymentMethod,
       notes,
-      nowIso(),
-      nowIso()
-    )
+      createdAt,
+      createdAt
+    ]
+
+    try {
+      insert.run(...insertArgs)
+    } catch (error) {
+      if (/UNIQUE constraint failed/i.test(String(error?.message ?? ""))) {
+        throw appError("payslip_period_exists", "A payslip already exists for this employee and period.")
+      }
+      throw error
+    }
 
     logAudit(db, { actor, entity: "payslip", entityId: id, action: "created", details: { number, netAmountMinor } })
     return mapPayslip(db.prepare("SELECT * FROM payslips WHERE id = ?").get(id))
@@ -1467,7 +1561,21 @@ function importAll(data, actor) {
         payment_date, payment_method, notes, is_signed, signed_at, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    for (const payslip of data.payslips) {
+    const seenPayslipPeriods = new Set()
+    const payslipsToImport = []
+    let skippedPayslips = 0
+    for (const payslip of [...data.payslips].sort((a, b) =>
+      String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""))
+    )) {
+      const key = `${payslip.employeeId}|${payslip.periodStart}|${payslip.periodEnd}`
+      if (seenPayslipPeriods.has(key)) {
+        skippedPayslips += 1
+        continue
+      }
+      seenPayslipPeriods.add(key)
+      payslipsToImport.push(payslip)
+    }
+    for (const payslip of payslipsToImport) {
       insertPayslip.run(
         payslip.id,
         payslip.number,
@@ -1505,8 +1613,14 @@ function importAll(data, actor) {
     }
     updateSettingsInTransaction(db, data.settings ?? {})
 
-    logAudit(db, { actor, entity: "database", entityId: null, action: "restored" })
-    return { ok: true }
+    logAudit(db, {
+      actor,
+      entity: "database",
+      entityId: null,
+      action: "restored",
+      details: skippedPayslips > 0 ? { skippedPayslips } : {}
+    })
+    return { ok: true, skippedPayslips }
   })
 }
 
@@ -1582,6 +1696,10 @@ module.exports = {
   setPayslipSigned,
   deletePayslip,
   exportAll,
+  attendancePage,
+  countAttendance,
+  payslipsPage,
+  countPayslips,
   dataCounts,
   logDatabaseRestore,
   importAll

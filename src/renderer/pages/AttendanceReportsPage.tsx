@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Edit3, FileSpreadsheet, Loader2, Printer, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Edit3, FileSpreadsheet, Loader2, Printer, Trash2, X } from "lucide-react"
 
 import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { exportAttendanceExcel } from "../services/excel"
 import { addDays, DatePreset, formatDuration, formatTime, getPresetDateRange, minutesToHours, todayKey } from "../services/date"
-import { AttendanceRecord, CompanySettings, Employee, Language } from "../types"
+import { AttendanceRecord, AttendanceSummary, CompanySettings, Employee, ExportProgress, Language } from "../types"
 import { AttendanceCorrectionModal } from "../components/AttendanceCorrectionModal"
 import { ConfirmDialog } from "../components/ConfirmDialog"
 import { FeedbackBanner, FeedbackTone } from "../components/FeedbackBanner"
@@ -16,12 +16,18 @@ interface AttendanceReportsPageProps {
   onSessionEnded: (message: string) => void
 }
 
+const PAGE_SIZE = 50
+
 export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ settings, onSessionEnded }) => {
   const { t, i18n } = useTranslation()
   const lang = (i18n.language || "ar") as Language
 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [printRecords, setPrintRecords] = useState<AttendanceRecord[] | null>(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [summary, setSummary] = useState<AttendanceSummary | null>(null)
   const [employeeId, setEmployeeId] = useState("")
   const [fromDate, setFromDate] = useState(() => addDays(todayKey(), -30))
   const [toDate, setToDate] = useState(() => todayKey())
@@ -30,6 +36,19 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
   const [editing, setEditing] = useState<AttendanceRecord | null>(null)
   const [deleting, setDeleting] = useState<AttendanceRecord | null>(null)
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
+  const exportIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    try {
+      return api.exporter.onProgress(progress => {
+        if (exportIdRef.current === progress.id) setExportProgress(progress)
+      })
+    } catch {
+      return undefined
+    }
+  }, [])
 
   const handleError = useCallback(
     (caught: unknown) => {
@@ -45,18 +64,20 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await api.attendance.list({
-        employeeId: employeeId || undefined,
-        fromDate,
-        toDate
-      })
-      setRecords(rows)
+      const filter = { employeeId: employeeId || undefined, fromDate, toDate }
+      const [result, aggregate] = await Promise.all([
+        api.attendance.page({ ...filter, page, pageSize: PAGE_SIZE }),
+        api.attendance.aggregate({ ...filter, dailyHours: settings.defaultDailyHours })
+      ])
+      setRecords(result.rows)
+      setTotal(result.total)
+      setSummary(aggregate)
     } catch (caught) {
       handleError(caught)
     } finally {
       setLoading(false)
     }
-  }, [employeeId, fromDate, toDate, handleError])
+  }, [employeeId, fromDate, page, settings.defaultDailyHours, toDate, handleError])
 
   useEffect(() => {
     void load()
@@ -79,23 +100,64 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
   }, [handleError])
 
   const selectedEmployee = employees.find(employee => employee.id === employeeId)
-  const closedRecords = records.filter(record => record.punchOutAt !== null)
-  const openRecords = records.length - closedRecords.length
-  const totalMinutes = closedRecords.reduce((total, record) => total + record.netMinutes, 0)
-  const totalBreaks = closedRecords.reduce((total, record) => total + record.breakMinutes, 0)
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const workedDays = summary?.workedDays ?? 0
+  const openRecords = summary?.openRecords ?? 0
+  const totalMinutes = summary?.workedMinutes ?? 0
+  const totalBreaks = summary?.breakMinutes ?? 0
 
   const handleExport = async () => {
+    const id = crypto.randomUUID()
+    exportIdRef.current = id
+    setExportProgress({ id, written: 0, total })
+    setExporting(true)
     try {
-      await exportAttendanceExcel(records, settings, {
-        fromDate,
-        toDate,
-        employee: selectedEmployee,
-        title: selectedEmployee
-          ? `${settings.companyName} — ${selectedEmployee.fullName}`
-          : `${settings.companyName} — ${t("attendance.sheetName")}`
-      })
+      const result = await exportAttendanceExcel(
+        { employeeId: employeeId || undefined, fromDate, toDate },
+        settings,
+        {
+          id,
+          fromDate,
+          toDate,
+          employee: selectedEmployee,
+          title: selectedEmployee
+            ? `${settings.companyName} — ${selectedEmployee.fullName}`
+            : `${settings.companyName} — ${t("attendance.sheetName")}`
+        }
+      )
+      if (result.canceled) {
+        setFeedback({ tone: "info", message: t("common.exportCanceled") })
+      } else {
+        setFeedback({ tone: "success", message: t("common.exportSaved", { path: result.filePath }) })
+      }
     } catch (caught) {
       handleError(caught)
+    } finally {
+      exportIdRef.current = null
+      setExportProgress(null)
+      setExporting(false)
+    }
+  }
+
+  const handleCancelExport = async () => {
+    if (!exportIdRef.current) return
+    try {
+      await api.exporter.cancel(exportIdRef.current)
+    } catch (caught) {
+      handleError(caught)
+    }
+  }
+
+  const handlePrint = async () => {
+    try {
+      const rows = await api.attendance.list({ employeeId: employeeId || undefined, fromDate, toDate })
+      setPrintRecords(rows)
+      await new Promise(resolve => window.setTimeout(resolve, 60))
+      window.print()
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      window.setTimeout(() => setPrintRecords(null), 300)
     }
   }
 
@@ -104,7 +166,11 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
     try {
       await api.attendance.remove(deleting.id)
       setDeleting(null)
-      await load()
+      if (records.length === 1 && page > 1) {
+        setPage(current => current - 1)
+      } else {
+        await load()
+      }
     } catch (caught) {
       setDeleting(null)
       handleError(caught)
@@ -124,7 +190,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             </h2>
             <p className="mt-1 text-xs text-slate-400">
               {t("attendance.summaryLine", {
-                days: closedRecords.length,
+                days: workedDays,
                 hours: minutesToHours(totalMinutes),
                 breaks: totalBreaks
               })}
@@ -133,8 +199,8 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={handleExport}
-              disabled={records.length === 0}
+              onClick={() => void handleExport()}
+              disabled={total === 0 || exporting}
               className="btn border border-[rgba(70,195,159,0.4)] bg-[rgba(43,166,136,0.18)] text-[#78dcbc] hover:bg-[rgba(43,166,136,0.3)]"
             >
               <FileSpreadsheet className="h-4 w-4" aria-hidden />
@@ -142,8 +208,8 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
-              disabled={records.length === 0}
+              onClick={() => void handlePrint()}
+              disabled={total === 0}
               className="btn btn-ghost"
             >
               <Printer className="h-4 w-4 text-blue-400" aria-hidden />
@@ -151,6 +217,26 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             </button>
           </div>
         </div>
+
+        {exporting && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] bg-[rgba(214,171,91,0.07)] px-6 py-2.5 text-xs text-[#e6c98a]">
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              {t("common.exporting", {
+                written: exportProgress?.written ?? 0,
+                total: exportProgress?.total || total
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleCancelExport()}
+              className="btn btn-ghost px-2.5 py-1 text-[11px]"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+              <span>{t("common.cancelExport")}</span>
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--line)] bg-[rgba(255,246,230,0.02)] px-6 py-2.5">
           <span className="text-xs text-[#8d8275]">{t("common.quickPresets")}:</span>
@@ -165,6 +251,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
                   setActivePreset(preset)
                   setFromDate(r.start)
                   setToDate(r.end)
+                  setPage(1)
                 }}
                 className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
                   isSelected
@@ -186,7 +273,10 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             <select
               id="filter-employee"
               value={employeeId}
-              onChange={event => setEmployeeId(event.target.value)}
+              onChange={event => {
+                setEmployeeId(event.target.value)
+                setPage(1)
+              }}
               className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
             >
               <option value="">{t("attendance.allEmployees")}</option>
@@ -208,6 +298,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
               onChange={event => {
                 setFromDate(event.target.value)
                 setActivePreset(null)
+                setPage(1)
               }}
               className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
             />
@@ -223,6 +314,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
               onChange={event => {
                 setToDate(event.target.value)
                 setActivePreset(null)
+                setPage(1)
               }}
               className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
             />
@@ -249,7 +341,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
           </div>
           <span className="rounded-lg bg-slate-800 px-3 py-1 font-mono text-xs font-bold text-blue-300">
             {t("attendance.summaryLine", {
-              days: closedRecords.length,
+              days: workedDays,
               hours: minutesToHours(totalMinutes),
               breaks: totalBreaks
             })}
@@ -285,7 +377,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
                   </td>
                 </tr>
               ) : (
-                records.map(record => (
+                (printRecords ?? records).map(record => (
                   <tr key={record.id}>
                     <td className="whitespace-nowrap font-mono text-[#ded4c6]">{record.recordDate}</td>
                     <td className="whitespace-nowrap font-semibold text-[#f0e9df]">{record.employeeName}</td>
@@ -346,6 +438,34 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             </tbody>
           </table>
         </div>
+
+        {total > 0 && (
+          <div className="no-print flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--line)] px-6 py-3 text-xs text-slate-400">
+            <span>
+              {t("common.pageOf", { page, pages })} · {t("common.recordsCount", { count: total })}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage(current => Math.max(1, current - 1))}
+                disabled={page <= 1 || loading}
+                className="btn btn-ghost px-2.5 py-1.5 text-xs disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
+                <span>{t("common.prevPage")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(current => Math.min(pages, current + 1))}
+                disabled={page >= pages || loading}
+                className="btn btn-ghost px-2.5 py-1.5 text-xs disabled:opacity-40"
+              >
+                <span>{t("common.nextPage")}</span>
+                <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <AttendanceCorrectionModal

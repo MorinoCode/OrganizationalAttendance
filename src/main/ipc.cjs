@@ -10,6 +10,7 @@ const { getDatabasePath } = require("./db/index.cjs")
 const auth = require("./lib/auth.cjs")
 const backup = require("./backup.cjs")
 const backupScheduler = require("./backupScheduler.cjs")
+const excelExport = require("./excelExport.cjs")
 const updater = require("./updater.cjs")
 const time = require("./lib/time.cjs")
 const { AppError, appError, toErrorPayload } = require("./lib/errors.cjs")
@@ -19,6 +20,33 @@ const MAX_LOGIN_FAILURES = 5
 const LOGIN_WINDOW_MS = 60 * 1000
 
 let loginFailures = []
+
+const activeExports = new Map()
+const EXPORT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
+
+function cancelActiveExports() {
+  for (const session of activeExports.values()) session.canceled = true
+}
+
+function discardActiveExports() {
+  for (const session of activeExports.values()) {
+    session.canceled = true
+    if (!session.tempPath) continue
+    try {
+      fs.rmSync(session.tempPath, { force: true })
+    } catch {
+    }
+  }
+  activeExports.clear()
+}
+
+function sanitizeFileName(name) {
+  const cleaned = String(name || "export.xlsx")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+    .trim()
+  const withExtension = cleaned.toLowerCase().endsWith(".xlsx") ? cleaned : `${cleaned}.xlsx`
+  return withExtension.slice(0, 120)
+}
 
 const RESTORE_SELECTION_TTL_MS = 10 * 60 * 1000
 const restoreSelections = new Map()
@@ -189,6 +217,7 @@ function registerIpcHandlers({ getMainWindow }) {
 
   handle("attendance:today", ({ employeeId } = {}) => repositories.todayRecords(employeeId))
   handle("attendance:list", data => repositories.listAttendance(data ?? {}), { requiresAuth: true })
+  handle("attendance:page", data => repositories.attendancePage(data ?? {}), { requiresAuth: true })
   handle("attendance:punch-in", ({ employeeId } = {}) => repositories.punchIn(employeeId, { actor: "kiosk" }))
   handle("attendance:start-break", ({ employeeId } = {}) => repositories.startBreak(employeeId, { actor: "kiosk" }))
   handle("attendance:end-break", ({ employeeId } = {}) => repositories.endBreak(employeeId, { actor: "kiosk" }))
@@ -210,6 +239,7 @@ function registerIpcHandlers({ getMainWindow }) {
 
 
   handle("payslips:list", data => repositories.listPayslips(data ?? {}), { requiresAuth: true })
+  handle("payslips:page", data => repositories.payslipsPage(data ?? {}), { requiresAuth: true })
   handle("payslips:save", data => repositories.savePayslip(data, "admin"), { requiresAuth: true })
   handle("payslips:set-signed", ({ id, isSigned } = {}) => repositories.setPayslipSigned(id, isSigned, "admin"), { requiresAuth: true })
   handle("payslips:delete", ({ id } = {}) => repositories.deletePayslip(id, "admin"), { requiresAuth: true })
@@ -305,6 +335,53 @@ function registerIpcHandlers({ getMainWindow }) {
   }, { requiresAuth: true })
 
 
+  const runExcelExport = async (kind, data = {}) => {
+    const win = getWindow(getMainWindow)
+    const spec = data.spec && typeof data.spec === "object" ? data.spec : {}
+    const exportId = String(data.id ?? "")
+    if (!EXPORT_ID_RE.test(exportId)) throw appError("export_invalid", "Invalid export request.")
+
+    const fileName = sanitizeFileName(spec.fileName || `${kind}.xlsx`)
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: String(spec.title || "Excel"),
+      defaultPath: path.join(app.getPath("documents"), fileName),
+      filters: [{ name: "Excel", extensions: ["xlsx"] }]
+    })
+    if (canceled || !filePath) return { canceled: true }
+    const targetPath = filePath
+
+    const session = { canceled: false, tempPath: `${targetPath}.part` }
+    activeExports.set(exportId, session)
+
+    const onProgress = progress => {
+      if (win.isDestroyed()) return
+      win.webContents.send("export:progress", { id: exportId, ...progress })
+    }
+    const shouldCancel = () => session.canceled || win.isDestroyed()
+    const filter = data.filter && typeof data.filter === "object" ? data.filter : {}
+
+    try {
+      const result =
+        kind === "attendance"
+          ? await excelExport.exportAttendance({ filter, spec, targetPath, onProgress, shouldCancel })
+          : await excelExport.exportPayslips({ filter, spec, targetPath, onProgress, shouldCancel })
+      return { canceled: false, ...result }
+    } catch (error) {
+      if (error?.code === "export_cancelled" || session.canceled) return { canceled: true }
+      throw error
+    } finally {
+      activeExports.delete(exportId)
+    }
+  }
+
+  handle("export:attendance", data => runExcelExport("attendance", data), { requiresAuth: true })
+  handle("export:payslips", data => runExcelExport("payslips", data), { requiresAuth: true })
+  handle("export:cancel", ({ id } = {}) => {
+    const session = activeExports.get(String(id ?? ""))
+    if (session) session.canceled = true
+    return { canceled: Boolean(session) }
+  }, { requiresAuth: true })
+
   handle("print:payslip", async () => {
     const win = getWindow(getMainWindow)
     return new Promise(resolve => {
@@ -333,4 +410,4 @@ function registerIpcHandlers({ getMainWindow }) {
   handle("updater:status", () => updater.getStatus())
 }
 
-module.exports = { registerIpcHandlers, MIN_PASSWORD_LENGTH }
+module.exports = { registerIpcHandlers, cancelActiveExports, discardActiveExports, MIN_PASSWORD_LENGTH }
