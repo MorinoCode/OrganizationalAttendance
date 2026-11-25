@@ -1,0 +1,344 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --ink-950: #0b0a08;
+    --ink-900: #14110d;
+    --ink-850: #1a1611;
+    --ink-800: #241f18;
+    --line: rgba(214, 186, 140, 0.14);
+    --line-strong: rgba(214, 186, 140, 0.32);
+    --brass: #c9a24b;
+    --brass-soft: rgba(201, 162, 75, 0.12);
+    --cream: #f4ece0;
+    --muted: #a2968a;
+  }
+
+  html {
+    color-scheme: dark;
+    background-color: var(--ink-950);
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background-color: var(--ink-950);
+    background-image:
+      radial-gradient(1100px 620px at 82% -12%, rgba(201, 162, 75, 0.11), transparent 62%),
+      radial-gradient(900px 520px at 6% -6%, rgba(43, 166, 136, 0.07), transparent 58%),
+      linear-gradient(180deg, rgba(255, 246, 230, 0.015), transparent 240px);
+    background-attachment: fixed;
+    color: var(--cream);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Noto Naskh Arabic",
+      "Vazirmatn", Tahoma, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.012;
+    background-image: repeating-linear-gradient(
+        45deg,
+        #ffffff 0,
+        #ffffff 1px,
+        transparent 1px,
+        transparent 3px
+      ),
+      repeating-linear-gradient(-45deg, #ffffff 0, #ffffff 1px, transparent 1px, transparent 3px);
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .font-mono,
+  [class*="font-mono"] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+
+  input,
+  textarea,
+  select {
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    caret-color: var(--brass);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--brass);
+  }
+
+  
+  .data-table tbody td {
+    line-height: 1.45;
+  }
+
+  ::selection {
+    background: rgba(201, 162, 75, 0.28);
+    color: #fff8ea;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(214, 171, 91, 0.7);
+    outline-offset: 2px;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+}
+
+@layer components {
+  
+  .panel {
+    position: relative;
+    border-radius: 1.125rem;
+    border: 1px solid var(--line);
+    background:
+      linear-gradient(180deg, rgba(255, 246, 230, 0.022), rgba(255, 246, 230, 0) 140px),
+      rgba(20, 17, 13, 0.92);
+    box-shadow: 0 26px 54px -38px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 246, 230, 0.045);
+  }
+
+  .panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.35rem 1.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(214, 171, 91, 0.82);
+  }
+
+  .rule-brass {
+    height: 2px;
+    width: 2.5rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brass), rgba(201, 162, 75, 0));
+  }
+
+  
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid transparent;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease,
+      color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    filter: grayscale(0.65);
+    box-shadow: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(180deg, #d6ab5b, #b8862f);
+    border-color: rgba(255, 246, 230, 0.18);
+    color: #1a1305;
+    box-shadow: 0 14px 26px -18px rgba(214, 171, 91, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #e2ba6f, #c6923a);
+  }
+
+  .btn-ghost {
+    border-color: var(--line-strong);
+    background: rgba(255, 246, 230, 0.035);
+    color: #ede4d6;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 246, 230, 0.075);
+    border-color: rgba(214, 186, 140, 0.45);
+  }
+
+  .btn-danger {
+    border-color: rgba(200, 95, 78, 0.4);
+    background: rgba(40, 16, 16, 0.55);
+    color: #e9a094;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: rgba(93, 35, 30, 0.7);
+    color: #fae2dd;
+  }
+
+  
+  .data-table {
+    width: 100%;
+    font-size: 0.85rem;
+  }
+
+  .data-table thead th {
+    padding: 0.85rem 1.35rem;
+    text-align: start;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: rgba(214, 171, 91, 0.7);
+    background: rgba(11, 10, 8, 0.6);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  .data-table tbody td {
+    padding: 0.9rem 1.35rem;
+    border-bottom: 1px solid rgba(214, 186, 140, 0.075);
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr {
+    transition: background-color 0.15s ease;
+  }
+
+  .data-table tbody tr:hover {
+    background: rgba(201, 162, 75, 0.045);
+  }
+
+  .data-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 246, 230, 0.03);
+    padding: 0.22rem 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #ded4c6;
+    white-space: nowrap;
+  }
+}
+
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(11, 10, 8, 0.55);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(214, 186, 140, 0.22);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(214, 186, 140, 0.4);
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #000000 !important;
+  }
+
+  body::before {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-only-section,
+  .print-only-section * {
+    visibility: visible;
+  }
+
+  .print-only-section {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .print-only-section table,
+  .print-only-section div,
+  .print-only-section span,
+  .print-only-section td,
+  .print-only-section th,
+  .print-only-section p,
+  .print-only-section h1,
+  .print-only-section h2,
+  .print-only-section h3,
+  .print-only-section h4 {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #94a3b8 !important;
+  }
+
+  .print-only-section thead th {
+    background: #e7e5e4 !important;
+    color: #1c1917 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,258 @@
+"use strict"
+
+
+const SCHEMA_VERSION = 3
+
+const MIGRATION_V1 = `
+CREATE TABLE IF NOT EXISTS company_settings (
+  id                   INTEGER PRIMARY KEY CHECK (id = 1),
+  company_name         TEXT    NOT NULL DEFAULT '',
+  owner_name           TEXT    NOT NULL DEFAULT '',
+  owner_role           TEXT    NOT NULL DEFAULT '',
+  admin_password_hash  TEXT    NOT NULL DEFAULT '',
+  currency             TEXT    NOT NULL DEFAULT 'KWD',
+  currency_decimals    INTEGER NOT NULL DEFAULT 3,
+  default_daily_hours  REAL    NOT NULL DEFAULT 8,
+  standard_work_days   INTEGER NOT NULL DEFAULT 26,
+  overtime_multiplier  REAL    NOT NULL DEFAULT 1.25,
+  is_configured        INTEGER NOT NULL DEFAULT 0,
+  logo_path            TEXT,
+  updated_at           TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+  id              TEXT    PRIMARY KEY,
+  full_name       TEXT    NOT NULL,
+  employee_code   TEXT    NOT NULL UNIQUE,
+  phone           TEXT    NOT NULL DEFAULT '',
+  department      TEXT    NOT NULL DEFAULT '',
+  salary_type     TEXT    NOT NULL CHECK (salary_type IN ('fixed_monthly', 'hourly', 'daily', 'custom')),
+  base_rate_minor INTEGER NOT NULL DEFAULT 0 CHECK (base_rate_minor >= 0),
+  is_active       INTEGER NOT NULL DEFAULT 1,
+  created_at      TEXT    NOT NULL,
+  updated_at      TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS attendance_records (
+  id            TEXT    PRIMARY KEY,
+  employee_id   TEXT    NOT NULL REFERENCES employees (id) ON DELETE CASCADE,
+  record_date   TEXT    NOT NULL,
+  punch_in_at   INTEGER,
+  punch_out_at  INTEGER,
+  break_minutes INTEGER NOT NULL DEFAULT 0 CHECK (break_minutes >= 0),
+  net_minutes   INTEGER NOT NULL DEFAULT 0 CHECK (net_minutes >= 0),
+  status        TEXT    NOT NULL CHECK (status IN ('present', 'on_break', 'completed', 'absent')),
+  notes         TEXT    NOT NULL DEFAULT '',
+  created_at    TEXT    NOT NULL,
+  updated_at    TEXT    NOT NULL,
+  -- One shift per employee per day: removes the duplicate-record class of bugs.
+  UNIQUE (employee_id, record_date)
+);
+
+CREATE TABLE IF NOT EXISTS break_logs (
+  id               TEXT    PRIMARY KEY,
+  attendance_id    TEXT    NOT NULL REFERENCES attendance_records (id) ON DELETE CASCADE,
+  break_start_at   INTEGER NOT NULL,
+  break_end_at     INTEGER,
+  duration_minutes INTEGER NOT NULL DEFAULT 0 CHECK (duration_minutes >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS leaves (
+  id          TEXT    PRIMARY KEY,
+  employee_id TEXT    NOT NULL REFERENCES employees (id) ON DELETE CASCADE,
+  leave_type  TEXT    NOT NULL CHECK (leave_type IN ('paid', 'unpaid', 'sick', 'emergency')),
+  start_date  TEXT    NOT NULL,
+  end_date    TEXT    NOT NULL,
+  days        INTEGER NOT NULL DEFAULT 1 CHECK (days >= 1),
+  is_paid     INTEGER NOT NULL DEFAULT 0,
+  reason      TEXT    NOT NULL DEFAULT '',
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payslips (
+  id                    TEXT    PRIMARY KEY,
+  number                TEXT    NOT NULL UNIQUE,
+  employee_id           TEXT    NOT NULL,
+  employee_name         TEXT    NOT NULL,
+  employee_code         TEXT    NOT NULL,
+  department            TEXT    NOT NULL DEFAULT '',
+  salary_type           TEXT    NOT NULL,
+  base_rate_minor       INTEGER NOT NULL DEFAULT 0,
+  period_start          TEXT    NOT NULL,
+  period_end            TEXT    NOT NULL,
+  worked_days           INTEGER NOT NULL DEFAULT 0,
+  worked_minutes        INTEGER NOT NULL DEFAULT 0,
+  break_minutes         INTEGER NOT NULL DEFAULT 0,
+  overtime_minutes      INTEGER NOT NULL DEFAULT 0,
+  unpaid_leave_days     INTEGER NOT NULL DEFAULT 0,
+  base_salary_minor     INTEGER NOT NULL DEFAULT 0,
+  overtime_amount_minor INTEGER NOT NULL DEFAULT 0,
+  bonuses_minor         INTEGER NOT NULL DEFAULT 0,
+  deductions_minor      INTEGER NOT NULL DEFAULT 0,
+  net_amount_minor      INTEGER NOT NULL DEFAULT 0,
+  payment_date          TEXT    NOT NULL DEFAULT '',
+  payment_method        TEXT    NOT NULL DEFAULT 'bank_transfer',
+  notes                 TEXT    NOT NULL DEFAULT '',
+  is_signed             INTEGER NOT NULL DEFAULT 0,
+  signed_at             TEXT,
+  created_at            TEXT    NOT NULL,
+  updated_at            TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  at        TEXT    NOT NULL,
+  actor     TEXT    NOT NULL,
+  entity    TEXT    NOT NULL,
+  entity_id TEXT,
+  action    TEXT    NOT NULL,
+  details   TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_date       ON attendance_records (record_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_employee   ON attendance_records (employee_id, record_date);
+CREATE INDEX IF NOT EXISTS idx_break_logs_attendance ON break_logs (attendance_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_employee       ON leaves (employee_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_leaves_range          ON leaves (start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_payslips_employee     ON payslips (employee_id, period_start);
+CREATE INDEX IF NOT EXISTS idx_payslips_period       ON payslips (period_start, period_end);
+`
+
+const MIGRATION_V2 = `
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  at        TEXT    NOT NULL,
+  actor     TEXT    NOT NULL,
+  entity    TEXT    NOT NULL,
+  entity_id TEXT,
+  action    TEXT    NOT NULL,
+  details   TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS payslips_rebuilt (
+  id                    TEXT    PRIMARY KEY,
+  number                TEXT    NOT NULL UNIQUE,
+  employee_id           TEXT    NOT NULL,
+  employee_name         TEXT    NOT NULL,
+  employee_code         TEXT    NOT NULL,
+  department            TEXT    NOT NULL DEFAULT '',
+  salary_type           TEXT    NOT NULL,
+  base_rate_minor       INTEGER NOT NULL DEFAULT 0,
+  period_start          TEXT    NOT NULL,
+  period_end            TEXT    NOT NULL,
+  worked_days           INTEGER NOT NULL DEFAULT 0,
+  worked_minutes        INTEGER NOT NULL DEFAULT 0,
+  break_minutes         INTEGER NOT NULL DEFAULT 0,
+  overtime_minutes      INTEGER NOT NULL DEFAULT 0,
+  unpaid_leave_days     INTEGER NOT NULL DEFAULT 0,
+  base_salary_minor     INTEGER NOT NULL DEFAULT 0,
+  overtime_amount_minor INTEGER NOT NULL DEFAULT 0,
+  bonuses_minor         INTEGER NOT NULL DEFAULT 0,
+  deductions_minor      INTEGER NOT NULL DEFAULT 0,
+  net_amount_minor      INTEGER NOT NULL DEFAULT 0,
+  payment_date          TEXT    NOT NULL DEFAULT '',
+  payment_method        TEXT    NOT NULL DEFAULT 'bank_transfer',
+  notes                 TEXT    NOT NULL DEFAULT '',
+  is_signed             INTEGER NOT NULL DEFAULT 0,
+  signed_at             TEXT,
+  created_at            TEXT    NOT NULL,
+  updated_at            TEXT    NOT NULL
+);
+
+INSERT OR IGNORE INTO payslips_rebuilt (
+  id, number, employee_id, employee_name, employee_code, department, salary_type, base_rate_minor,
+  period_start, period_end, worked_days, worked_minutes, break_minutes, overtime_minutes, unpaid_leave_days,
+  base_salary_minor, overtime_amount_minor, bonuses_minor, deductions_minor, net_amount_minor,
+  payment_date, payment_method, notes, is_signed, signed_at, created_at, updated_at
+)
+SELECT
+  id, number, employee_id, employee_name, employee_code, COALESCE(department, ''), salary_type,
+  COALESCE(base_rate_minor, 0), period_start, period_end, COALESCE(worked_days, 0),
+  COALESCE(worked_minutes, 0), COALESCE(break_minutes, 0), COALESCE(overtime_minutes, 0),
+  COALESCE(unpaid_leave_days, 0), COALESCE(base_salary_minor, 0), COALESCE(overtime_amount_minor, 0),
+  COALESCE(bonuses_minor, 0), COALESCE(deductions_minor, 0), COALESCE(net_amount_minor, 0),
+  COALESCE(payment_date, ''), COALESCE(payment_method, 'bank_transfer'), COALESCE(notes, ''),
+  COALESCE(is_signed, 0), signed_at, created_at, updated_at
+FROM payslips;
+
+DROP TABLE payslips;
+ALTER TABLE payslips_rebuilt RENAME TO payslips;
+
+CREATE INDEX IF NOT EXISTS idx_payslips_employee ON payslips (employee_id, period_start);
+CREATE INDEX IF NOT EXISTS idx_payslips_period   ON payslips (period_start, period_end);
+`
+
+const MIGRATION_V3 = `
+ALTER TABLE company_settings ADD COLUMN shift_start_minutes INTEGER NOT NULL DEFAULT 480;
+ALTER TABLE company_settings ADD COLUMN shift_end_minutes   INTEGER NOT NULL DEFAULT 1020;
+ALTER TABLE company_settings ADD COLUMN grace_minutes       INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE company_settings ADD COLUMN work_days           TEXT    NOT NULL DEFAULT '0,1,2,3,4';
+
+ALTER TABLE attendance_records ADD COLUMN late_minutes        INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE attendance_records ADD COLUMN early_leave_minutes INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance_records (status);
+`
+
+const MIGRATIONS = [
+  { version: 1, sql: MIGRATION_V1 },
+  { version: 2, sql: MIGRATION_V2 },
+  { version: 3, sql: MIGRATION_V3 }
+]
+
+function getUserVersion(db) {
+  const row = db.prepare("PRAGMA user_version").get() || {}
+  const value = row.user_version ?? Object.values(row)[0] ?? 0
+  return Number(value) || 0
+}
+
+function setUserVersion(db, version) {
+  db.exec(`PRAGMA user_version = ${Number(version)}`)
+}
+
+function seedSettingsRow(db) {
+  db.prepare(
+    `INSERT OR IGNORE INTO company_settings (
+      id, company_name, owner_name, owner_role, admin_password_hash,
+      currency, currency_decimals, default_daily_hours, standard_work_days,
+      overtime_multiplier, is_configured, logo_path, updated_at
+    ) VALUES (1, '', '', '', '', 'KWD', 3, 8.0, 26, 1.25, 0, NULL, ?)`
+  ).run(new Date().toISOString())
+}
+
+function runMigrations(db) {
+  const current = getUserVersion(db)
+  if (current > SCHEMA_VERSION) {
+    throw new Error(
+      `Database schema v${current} is newer than this application (v${SCHEMA_VERSION}). Please update the application.`
+    )
+  }
+
+  for (const migration of MIGRATIONS) {
+    if (migration.version <= current) continue
+    db.exec("BEGIN IMMEDIATE")
+    try {
+      db.exec(migration.sql)
+      if (migration.version === 1) seedSettingsRow(db)
+      setUserVersion(db, migration.version)
+      db.exec("COMMIT")
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK")
+      } catch {
+      }
+      throw error
+    }
+  }
+
+  return getUserVersion(db)
+}
+
+module.exports = {
+  SCHEMA_VERSION,
+  MIGRATIONS,
+  getUserVersion,
+  setUserVersion,
+  runMigrations
+}
