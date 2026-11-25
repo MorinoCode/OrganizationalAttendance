@@ -18,9 +18,10 @@ import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { LOCALES, formatDateTime, minutesToTime, timeToMinutes } from "../services/date"
 import { useAppStore } from "../store/useAppStore"
-import { AppInfo, AuditLogEntry, CompanySettings, Language } from "../types"
-import { ConfirmDialog } from "../components/ConfirmDialog"
+import { AppInfo, AuditLogEntry, BackupEntry, BackupPreview, BackupStatus, CompanySettings, Language } from "../types"
 import { FeedbackBanner, FeedbackTone } from "../components/FeedbackBanner"
+import { RestorePreviewDialog } from "../components/RestorePreviewDialog"
+import { formatFileSize } from "../services/format"
 
 interface SettingsPageProps {
   settings: CompanySettings
@@ -71,7 +72,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
 
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [audit, setAudit] = useState<AuditLogEntry[]>([])
-  const [confirmRestore, setConfirmRestore] = useState(false)
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null)
+  const [pendingRestore, setPendingRestore] = useState<
+    { source: "file"; selectionId: string; preview: BackupPreview } | { source: "auto"; entry: BackupEntry } | null
+  >(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
@@ -95,9 +99,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
 
   const loadSideData = useCallback(async () => {
     try {
-      const [appInfo, logs] = await Promise.all([api.app.info(), api.audit.list(30)])
+      const [appInfo, logs, backupInfo] = await Promise.all([api.app.info(), api.audit.list(30), api.backup.status()])
       setInfo(appInfo)
       setAudit(logs)
+      setBackupStatus(backupInfo)
     } catch (caught) {
       handleError(caught)
     }
@@ -221,23 +226,76 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
     }
   }
 
-  const handleRestore = async () => {
-    setConfirmRestore(false)
-    setBusy("restore")
+  const refreshBackupStatus = useCallback(async () => {
     try {
-      const result = await api.backup.restore()
-      if (result.canceled) {
-        setFeedback({ tone: "info", message: t("settings.restoreCanceled") })
-        return
-      }
-      setFeedback({ tone: "success", message: t("settings.restoreDone") })
-      window.setTimeout(() => window.location.reload(), 1200)
+      setBackupStatus(await api.backup.status())
+    } catch (caught) {
+      handleError(caught)
+    }
+  }, [handleError])
+
+  const handleBackupNow = async () => {
+    setBusy("backup-now")
+    try {
+      await api.backup.now()
+      setFeedback({ tone: "success", message: t("settings.backupNowDone") })
+      await refreshBackupStatus()
     } catch (caught) {
       handleError(caught)
     } finally {
       setBusy(null)
     }
   }
+
+  const handleChooseBackupFile = async () => {
+    setBusy("choose-backup")
+    try {
+      const result = await api.backup.choose()
+      if (result.canceled || !result.selectionId || !result.preview) return
+      setPendingRestore({ source: "file", selectionId: result.selectionId, preview: result.preview })
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleConfirmRestore = async () => {
+    if (!pendingRestore) return
+    setBusy("restore")
+    try {
+      const result =
+        pendingRestore.source === "file"
+          ? await api.backup.restore(pendingRestore.selectionId)
+          : await api.backup.restoreAuto(pendingRestore.entry.fileName)
+      setPendingRestore(null)
+      if (!result.restored) {
+        setFeedback({ tone: "info", message: t("settings.restoreCanceled") })
+        return
+      }
+      setFeedback({ tone: "success", message: t("settings.restoreDone") })
+      window.setTimeout(() => window.location.reload(), 1200)
+    } catch (caught) {
+      setPendingRestore(null)
+      handleError(caught)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const restorePreview: BackupPreview | null = pendingRestore
+    ? pendingRestore.source === "file"
+      ? pendingRestore.preview
+      : {
+          fileName: pendingRestore.entry.fileName,
+          exportedAt: pendingRestore.entry.createdAt,
+          schemaVersion: pendingRestore.entry.schemaVersion ?? 0,
+          formatVersion: 1,
+          counts: pendingRestore.entry.counts ?? { employees: 0, attendance: 0, leaves: 0, payslips: 0 },
+          attendanceFrom: null,
+          attendanceTo: null
+        }
+    : null
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -540,9 +598,96 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
       </div>
 
       <div className="panel p-7">
-        <h2 className="border-b border-[color:var(--line)] pb-4 text-lg font-semibold tracking-tight text-[#f4ece0]">
-          {t("settings.backupTitle")}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] pb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[#78dcbc]" aria-hidden />
+            <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.backupTitle")}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleBackupNow()}
+            disabled={busy === "backup-now"}
+            className="btn btn-ghost"
+          >
+            {busy === "backup-now" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5 text-[#78dcbc]" aria-hidden />}
+            <span>{t("settings.backupNow")}</span>
+          </button>
+        </div>
+
+        <p className="mt-4 text-xs leading-relaxed text-slate-400">
+          {t("settings.backupAutoHint", {
+            interval: backupStatus?.intervalMinutes ?? 60,
+            changes: backupStatus?.changeThreshold ?? 25,
+            keep: backupStatus?.keep ?? 30
+          })}
+        </p>
+
+        <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.5)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {t("settings.backupLastHealthy")}
+              </span>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {backupStatus?.last ? (
+                  <>
+                    <span className="text-sm font-semibold text-slate-100">
+                      {formatDateTime(Date.parse(backupStatus.last.createdAt), lang)}
+                    </span>
+                    <span className="chip">{t(`settings.backupReason_${backupStatus.last.reason}`)}</span>
+                    <span className="text-[11px] text-slate-500">{formatFileSize(backupStatus.last.sizeBytes)}</span>
+                    {backupStatus.last.verified ? (
+                      <span className="chip flex items-center gap-1 border-[rgba(70,195,159,0.4)] text-[#78dcbc]">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden />
+                        {t("settings.backupVerified")}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-[#e6b276]">{t("settings.backupUnverified")}</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-sm text-slate-400">{t("settings.backupNever")}</span>
+                )}
+              </div>
+            </div>
+            <span className="text-[11px] text-slate-500">
+              {t("settings.backupKeepCount", { count: backupStatus?.keep ?? 30 })}
+            </span>
+          </div>
+          {backupStatus?.directory && (
+            <p className="mt-3 break-all font-mono text-[10px] text-slate-600" dir="ltr">
+              {backupStatus.directory}
+            </p>
+          )}
+        </div>
+
+        {backupStatus && backupStatus.backups.length > 0 && (
+          <div className="mt-5">
+            <h4 className="mb-2 text-xs font-semibold text-slate-300">{t("settings.backupListTitle")}</h4>
+            <ul className="divide-y divide-[rgba(214,186,140,0.08)]">
+              {backupStatus.backups.slice(0, 6).map(entry => (
+                <li key={entry.fileName} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                  <span className="break-all font-mono text-[11px] text-slate-300" dir="ltr">
+                    {entry.fileName}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <span className="text-[11px] text-slate-500">
+                      {formatDateTime(Date.parse(entry.createdAt), lang)} · {formatFileSize(entry.sizeBytes)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingRestore({ source: "auto", entry })}
+                      className="btn btn-ghost px-2.5 py-1 text-[11px]"
+                    >
+                      <History className="h-3 w-3" aria-hidden />
+                      <span>{t("settings.backupRestoreThis")}</span>
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex flex-col justify-between rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.5)] p-6">
@@ -566,16 +711,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
               <h4 className="mb-1 text-base font-bold text-slate-200">{t("settings.restoreBackup")}</h4>
               <p className="flex items-start gap-1.5 text-xs text-slate-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
-                {t("settings.restoreConfirm")}
+                {t("settings.backupPreviewHint")}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setConfirmRestore(true)}
-              disabled={busy === "restore"}
+              onClick={() => void handleChooseBackupFile()}
+              disabled={busy === "choose-backup" || busy === "restore"}
               className="btn btn-ghost mt-6 w-full"
             >
-              {busy === "restore" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4 text-blue-400" aria-hidden />}
+              {busy === "choose-backup" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4 text-blue-400" aria-hidden />}
               <span>{t("settings.restoreBackup")}</span>
             </button>
           </div>
@@ -718,16 +863,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
         )}
       </div>
 
-      <ConfirmDialog
-        isOpen={confirmRestore}
-        title={t("settings.restoreBackup")}
-        message={t("settings.restoreConfirm")}
-        confirmLabel={t("common.confirm")}
-        cancelLabel={t("common.cancel")}
-        tone="primary"
+      <RestorePreviewDialog
+        isOpen={Boolean(pendingRestore)}
+        source={pendingRestore?.source ?? null}
+        preview={restorePreview}
+        sizeBytes={pendingRestore?.source === "auto" ? pendingRestore.entry.sizeBytes : null}
+        verified={pendingRestore?.source === "auto" ? pendingRestore.entry.verified : null}
         busy={busy === "restore"}
-        onConfirm={() => void handleRestore()}
-        onCancel={() => setConfirmRestore(false)}
+        onConfirm={() => void handleConfirmRestore()}
+        onCancel={() => setPendingRestore(null)}
       />
     </div>
   )

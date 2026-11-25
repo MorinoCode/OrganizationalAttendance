@@ -62,7 +62,11 @@ contextBridge.exposeInMainWorld("api", {
   },
   backup: {
     export: token => invoke("backup:export", {}, token),
-    restore: token => invoke("backup:restore", {}, token)
+    status: token => invoke("backup:status", {}, token),
+    now: token => invoke("backup:auto-now", {}, token),
+    choose: token => invoke("backup:choose", {}, token),
+    restore: (selectionId, token) => invoke("backup:restore", { selectionId }, token),
+    restoreAuto: (fileName, token) => invoke("backup:restore-auto", { fileName }, token)
   },
   print: {
     payslip: token => invoke("print:payslip", {}, token),

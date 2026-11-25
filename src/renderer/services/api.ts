@@ -4,12 +4,16 @@ import {
   AttendanceSummary,
   AuditLogEntry,
   AuthSession,
+  BackupEntry,
+  BackupPreview,
+  BackupStatus,
   CompanySettings,
   Employee,
   LeaveRecord,
   MonthCloseReport,
   Payslip,
-  PublicEmployee
+  PublicEmployee,
+  RestoreSnapshotResult
 } from "../types"
 import { ApiError } from "./errors"
 
@@ -81,7 +85,11 @@ interface Bridge {
   audit: { list(data: { limit?: number }, token: string | null): Promise<Envelope<AuditLogEntry[]>> }
   backup: {
     export(token: string | null): Promise<Envelope<{ canceled: boolean; filePath?: string }>>
-    restore(token: string | null): Promise<Envelope<{ canceled: boolean; restored?: boolean }>>
+    status(token: string | null): Promise<Envelope<BackupStatus>>
+    now(token: string | null): Promise<Envelope<BackupEntry>>
+    choose(token: string | null): Promise<Envelope<{ canceled: boolean; selectionId?: string; preview?: BackupPreview }>>
+    restore(selectionId: string | undefined, token: string | null): Promise<Envelope<RestoreSnapshotResult>>
+    restoreAuto(fileName: string, token: string | null): Promise<Envelope<RestoreSnapshotResult>>
   }
   print: {
     payslip(token: string | null): Promise<Envelope<{ success: boolean; reason: string | null }>>
@@ -202,7 +210,11 @@ export const api = {
   },
   backup: {
     export: () => unwrap(bridge().backup.export(sessionToken)),
-    restore: () => unwrap(bridge().backup.restore(sessionToken))
+    status: () => unwrap(bridge().backup.status(sessionToken)),
+    now: () => unwrap(bridge().backup.now(sessionToken)),
+    choose: () => unwrap(bridge().backup.choose(sessionToken)),
+    restore: (selectionId?: string) => unwrap(bridge().backup.restore(selectionId, sessionToken)),
+    restoreAuto: (fileName: string) => unwrap(bridge().backup.restoreAuto(fileName, sessionToken))
   },
   print: {
     payslip: () => unwrap(bridge().print.payslip(sessionToken)),
