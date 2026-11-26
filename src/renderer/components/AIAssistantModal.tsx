@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { Bot, RotateCcw, Send, Sparkles, User, X } from "lucide-react"
 
@@ -121,13 +122,16 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
 
   if (!isOpen) return null
 
-  return (
+  const modal = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.78)] p-3 sm:p-5 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={event => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,5,4,0.78)] p-3 sm:p-5 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="panel relative flex h-[88vh] max-h-[46rem] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[rgba(214,171,91,0.38)] bg-[rgba(14,12,10,0.96)] shadow-[0_25px_70px_rgba(0,0,0,0.92),0_0_35px_rgba(214,171,91,0.18)]">
+      <div className="panel relative flex h-[min(46rem,calc(100vh-3rem))] w-[94vw] max-w-2xl flex-col overflow-hidden rounded-2xl border border-[rgba(214,171,91,0.38)] bg-[rgba(14,12,10,0.96)] shadow-[0_25px_70px_rgba(0,0,0,0.92),0_0_35px_rgba(214,171,91,0.18)]">
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[rgba(214,171,91,0.85)] to-transparent" />
 
         <div className="flex items-center justify-between border-b border-[color:var(--line)] bg-[rgba(20,17,14,0.7)] px-5 py-4">
@@ -269,4 +273,9 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
       </div>
     </div>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(modal, document.body)
+  }
+  return modal
 }
