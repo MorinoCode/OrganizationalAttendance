@@ -2,6 +2,11 @@
 
 const DEFAULT_INITIAL_DELAY_MS = 20 * 1000
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+const DEFAULT_GITHUB_PUBLISH = Object.freeze({
+  provider: "github",
+  owner: "MorinoCode",
+  repo: "OrganizationalAttendance"
+})
 
 function normalizeFeedUrl(value) {
   const raw = typeof value === "string" ? value.trim() : ""
@@ -21,10 +26,12 @@ function createUpdaterService({
   loadAutoUpdater,
   getMainWindow = () => null,
   feedUrl = null,
+  publishConfig = null,
   initialDelayMs = DEFAULT_INITIAL_DELAY_MS,
   checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
   logger = console
 }) {
+  const hasConfig = Boolean(feedUrl || publishConfig)
   let updater = null
   let listenersBound = false
   let initialized = false
@@ -38,7 +45,7 @@ function createUpdaterService({
       ...state,
       currentVersion: app.getVersion(),
       isPackaged: Boolean(app.isPackaged),
-      feedConfigured: Boolean(feedUrl)
+      feedConfigured: hasConfig
     }
   }
 
@@ -73,6 +80,8 @@ function createUpdaterService({
     updater.logger = logger
     if (feedUrl && typeof updater.setFeedURL === "function") {
       updater.setFeedURL({ provider: "generic", url: feedUrl })
+    } else if (publishConfig && typeof updater.setFeedURL === "function") {
+      updater.setFeedURL(publishConfig)
     }
     bindEvents(updater)
     return updater
@@ -126,9 +135,9 @@ function createUpdaterService({
 
   async function checkForUpdates() {
     if (!app.isPackaged) {
-      return { status: "development", currentVersion: app.getVersion(), version: null, percent: 0, error: null, feedConfigured: Boolean(feedUrl) }
+      return { status: "development", currentVersion: app.getVersion(), version: null, percent: 0, error: null, feedConfigured: hasConfig }
     }
-    if (!feedUrl) {
+    if (!hasConfig) {
       return { status: "not-configured", currentVersion: app.getVersion(), version: null, percent: 0, error: null, feedConfigured: false }
     }
     return runCheck()
@@ -140,14 +149,14 @@ function createUpdaterService({
       logger.info("[updater] automatic updates are disabled in development")
       return
     }
-    if (!feedUrl) {
-      logger.warn("[updater] HOZOR_UPDATE_URL is not set; automatic update checks are disabled")
+    if (!hasConfig) {
+      logger.warn("[updater] update feed is not configured; automatic update checks are disabled")
       state = { ...state, status: "not-configured" }
       return
     }
     initialized = true
     if (!resolveUpdater()) return
-    logger.info(`[updater] automatic checks enabled against ${feedUrl}`)
+    logger.info(`[updater] automatic checks enabled against ${feedUrl || publishConfig?.provider}`)
 
     checkTimer = setTimeout(() => {
       void checkForUpdates()
@@ -161,7 +170,7 @@ function createUpdaterService({
 
   async function downloadUpdate() {
     if (!app.isPackaged) return { ok: false, reason: "development" }
-    if (!feedUrl) return { ok: false, reason: "not-configured" }
+    if (!hasConfig) return { ok: false, reason: "not-configured" }
     const instance = resolveUpdater()
     if (!instance) return { ok: false, reason: "unavailable" }
     if (state.status === "downloaded") return { ok: true, alreadyDownloaded: true }
@@ -180,7 +189,7 @@ function createUpdaterService({
 
   function installUpdate() {
     if (!app.isPackaged) return { ok: false, reason: "development" }
-    if (!feedUrl) return { ok: false, reason: "not-configured" }
+    if (!hasConfig) return { ok: false, reason: "not-configured" }
     if (state.status !== "downloaded") return { ok: false, reason: "not-downloaded" }
     const instance = resolveUpdater()
     if (!instance) return { ok: false, reason: "unavailable" }
@@ -216,11 +225,13 @@ function resolveDefaultFeedUrl(env = process.env) {
 function getService() {
   if (!service) {
     const { app } = require("electron")
+    const customFeed = resolveDefaultFeedUrl()
     service = createUpdaterService({
       app,
       loadAutoUpdater: () => require("electron-updater"),
       getMainWindow: () => windowGetter(),
-      feedUrl: resolveDefaultFeedUrl()
+      feedUrl: customFeed,
+      publishConfig: customFeed ? null : DEFAULT_GITHUB_PUBLISH
     })
   }
   return service
