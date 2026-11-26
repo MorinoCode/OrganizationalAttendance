@@ -46,7 +46,6 @@
     "dashboard": "داشبورد",
     "employees": "کارمندان",
     "attendance": "حضور و گزارش‌ها",
-    "leaves": "مرخصی‌ها و غیبت‌ها",
     "payroll": "فیش‌های حقوق",
     "settings": "تنظیمات",
     "sessionExpired": "نشست مدیر منقضی شد. دوباره وارد شوید.",
@@ -61,8 +60,7 @@
     "confirmNewPassword": "تکرار رمز عبور جدید",
     "confirmNewPasswordPlaceholder": "تکرار رمز جدید...",
     "back": "بازگشت",
-    "resetAndLogin": "تغییر رمز و ورود",
-    "monthClose": "بستن ماه"
+    "resetAndLogin": "تغییر رمز و ورود"
   },
   "dashboard": {
     "alerts": {
@@ -85,6 +83,9 @@
       "daysLeave": "روزهای مرخصی",
       "daysAbsent": "روزهای غیبت",
       "daysExpected": "روزهای مورد انتظار",
+      "total": "جمع کل",
+      "overtimeTotal": "جمع بازه",
+      "absenceBasis": "مخرج کسر: {{days}} روز کاری × {{employees}} کارمند = {{expected}} روز مورد انتظار",
       "noData": "هنوز اطلاعاتی برای نمایش ثبت نشده است."
     }
   },
@@ -159,30 +160,6 @@
     "openShiftsWarning": "{{count}} شیفت ناتمام در حقوق محاسبه نمی‌شود تا زمانی که بسته یا اصلاح شود.",
     "lateShort": "تأخیر {{minutes}} د",
     "earlyLeaveShort": "خروج زودتر {{minutes}} د"
-  },
-  "leaves": {
-    "title": "مرخصی‌ها و غیبت‌ها",
-    "add": "افزودن مرخصی",
-    "edit": "ویرایش مرخصی",
-    "employee": "کارمند",
-    "type": "نوع مرخصی",
-    "types": {
-      "paid": "مرخصی با حقوق",
-      "unpaid": "مرخصی بدون حقوق",
-      "sick": "مرخصی استعلاجی",
-      "emergency": "مرخصی اضطراری"
-    },
-    "startDate": "از تاریخ",
-    "endDate": "تا تاریخ",
-    "days": "تعداد روز",
-    "dayUnit": "روز",
-    "invalidRange": "تاریخ پایان باید برابر یا بعد از تاریخ شروع باشد.",
-    "paid": "با حقوق",
-    "unpaid": "بدون حقوق",
-    "reason": "علت",
-    "noRecords": "مرخصی ثبت نشده است.",
-    "confirmDelete": "این مرخصی حذف شود؟",
-    "summaryLine": "{{count}} رکورد • {{days}} روز • {{unpaid}} روز بدون حقوق"
   },
   "payroll": {
     "title": "فیش‌های حقوق",
@@ -330,9 +307,6 @@
       "downloadButton": "دریافت به‌روزرسانی",
       "installButton": "ری‌استارت و اعمال نسخه جدید"
     },
-    "auditTitle": "سابقه تغییرات",
-    "auditEmpty": "تغییری ثبت نشده است",
-    "auditHint": "آخرین تغییرات مدیریتی روی تردد، حقوق و تنظیمات.",
     "savedBackupTo": "نسخه پشتیبان ذخیره شد در: {{path}}",
     "language": "زبان",
     "shiftSection": "شیفت و برنامهٔ کاری",
@@ -434,34 +408,5 @@
     "password_mismatch": "تکرار رمز عبور جدید مطابقت ندارد.",
     "invalid_shift_range": "برنامهٔ شیفت نامعتبر است: پایان باید بعد از شروع باشد.",
     "invalid_work_days": "حداقل یک روز کاری انتخاب کنید."
-  },
-  "monthClose": {
-    "title": "بستن ماه",
-    "subtitle": "آمادگی حقوق: روزهای موظف در برابر حضور، غیبت، مرخصی و تأخیر هر کارمند.",
-    "period": "دوره",
-    "shiftLine": "شیفت {{start}} – {{end}} · ارفاق {{grace}} دقیقه",
-    "employee": "کارمند",
-    "required": "روز موظف",
-    "present": "حضور",
-    "absent": "غیبت",
-    "leaveDays": "مرخصی",
-    "unpaid": "روز بدون حقوق",
-    "late": "تأخیر",
-    "earlyLeave": "خروج زودتر",
-    "worked": "ساعت کار",
-    "overtime": "اضافه‌کار",
-    "open": "شیفت باز",
-    "openWarning": "{{count}} شیفت در این دوره بسته نشده و ساعت آن تا ثبت خروج محاسبه نمی‌شود.",
-    "recalculate": "محاسبهٔ دوبارهٔ تأخیر",
-    "recalculated": "{{count}} رکورد به‌روزرسانی شد.",
-    "markAbsences": "ثبت غیبت",
-    "absencesMarked": "{{count}} روز غیبت ثبت شد.",
-    "clearAbsences": "حذف غیبت‌های ثبت‌شده",
-    "absencesCleared": "{{count}} رکورد غیبت حذف شد.",
-    "confirmMark": "برای هر روز کاری بدون تردد و بدون مرخصی، غیبت ثبت می‌شود. ادامه می‌دهید؟",
-    "confirmClear": "غیبت‌های ثبت‌شدهٔ این دوره حذف می‌شوند (فقط رکوردهای بدون تردد). ادامه؟",
-    "empty": "داده‌ای برای این دوره نیست.",
-    "lateHours": "تأخیر (ساعت)",
-    "asOf": "تا {{date}}"
   }
 }

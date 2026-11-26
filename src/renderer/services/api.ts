@@ -2,7 +2,6 @@ import {
   AppInfo,
   AttendanceRecord,
   AttendanceSummary,
-  AuditLogEntry,
   AuthSession,
   BackupEntry,
   BackupPreview,
@@ -13,8 +12,6 @@ import {
   ExcelExportSpec,
   ExportProgress,
   ExportResult,
-  LeaveRecord,
-  MonthCloseReport,
   PagedResult,
   Payslip,
   PublicEmployee,
@@ -75,9 +72,6 @@ interface Bridge {
     remove(data: { id: string }, token: string | null): Promise<Envelope<{ id: string }>>
   }
   leaves: {
-    list(data: Record<string, unknown>, token: string | null): Promise<Envelope<LeaveRecord[]>>
-    save(data: Record<string, unknown>, token: string | null): Promise<Envelope<LeaveRecord>>
-    remove(data: { id: string }, token: string | null): Promise<Envelope<{ id: string }>>
     unpaidDays(data: Record<string, unknown>, token: string | null): Promise<Envelope<number>>
   }
   payslips: {
@@ -88,10 +82,8 @@ interface Bridge {
     remove(data: { id: string }, token: string | null): Promise<Envelope<{ id: string }>>
   }
   reports: {
-    monthClose(data: { fromDate?: string; toDate?: string }, token: string | null): Promise<Envelope<MonthCloseReport>>
     dashboardInsights(data: { months?: number }, token: string | null): Promise<Envelope<DashboardInsights>>
   }
-  audit: { list(data: { limit?: number }, token: string | null): Promise<Envelope<AuditLogEntry[]>> }
   backup: {
     export(token: string | null): Promise<Envelope<{ canceled: boolean; filePath?: string }>>
     status(token: string | null): Promise<Envelope<BackupStatus>>
@@ -212,9 +204,6 @@ export const api = {
     remove: (id: string) => unwrap(bridge().attendance.remove({ id }, sessionToken))
   },
   leaves: {
-    list: (filter: Record<string, unknown> = {}) => unwrap(bridge().leaves.list(filter, sessionToken)),
-    save: (data: Record<string, unknown>) => unwrap(bridge().leaves.save(data, sessionToken)),
-    remove: (id: string) => unwrap(bridge().leaves.remove({ id }, sessionToken)),
     unpaidDays: (employeeId: string, fromDate: string, toDate: string) =>
       unwrap(bridge().leaves.unpaidDays({ employeeId, fromDate, toDate }, sessionToken))
   },
@@ -226,12 +215,7 @@ export const api = {
     remove: (id: string) => unwrap(bridge().payslips.remove({ id }, sessionToken))
   },
   reports: {
-    monthClose: (fromDate: string, toDate: string) =>
-      unwrap(bridge().reports.monthClose({ fromDate, toDate }, sessionToken)),
     dashboardInsights: (months = 6) => unwrap(bridge().reports.dashboardInsights({ months }, sessionToken))
-  },
-  audit: {
-    list: (limit = 50) => unwrap(bridge().audit.list({ limit }, sessionToken))
   },
   backup: {
     export: () => unwrap(bridge().backup.export(sessionToken)),

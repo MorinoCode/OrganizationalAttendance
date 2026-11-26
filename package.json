@@ -1,6 +1,6 @@
 {
   "name": "hozor-ghiab",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Local attendance and payroll desktop system for Windows (Kuwait edition)",
   "repository": {
     "type": "git",
@@ -24,7 +24,8 @@
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir",
     "postinstall": "electron-builder install-app-deps",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:packaged": "npm run dist:dir && node scripts/smoke.mjs --packaged"
   },
   "dependencies": {
     "clsx": "^2.1.1",

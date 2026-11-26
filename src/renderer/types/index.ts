@@ -4,8 +4,6 @@ export type SalaryType = "fixed_monthly" | "hourly" | "daily" | "custom"
 
 export type AttendanceStatus = "present" | "on_break" | "completed" | "absent"
 
-export type LeaveType = "paid" | "unpaid" | "sick" | "emergency"
-
 export type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "knet"
 
 export interface CompanySettings {
@@ -68,19 +66,6 @@ export interface AttendanceRecord {
   status: AttendanceStatus
   notes: string
   breaks: BreakLog[]
-}
-
-export interface LeaveRecord {
-  id: string
-  employeeId: string
-  employeeName: string
-  leaveType: LeaveType
-  startDate: string
-  endDate: string
-  days: number
-  isPaid: boolean
-  reason: string
-  createdAt: string
 }
 
 export interface Payslip {
@@ -166,62 +151,6 @@ export interface PagedResult<T> {
   pageSize: number
 }
 
-export interface MonthCloseEmployee {
-  employeeId: string
-  employeeCode: string
-  employeeName: string
-  department: string
-  isActive: boolean
-  requiredDays: number
-  presentDays: number
-  absentDays: number
-  absentMarkedDays: number
-  leaveDays: number
-  unpaidLeaveDays: number
-  lateMinutes: number
-  earlyLeaveMinutes: number
-  workedMinutes: number
-  overtimeMinutes: number
-  openRecords: number
-}
-
-export interface MonthCloseTotals {
-  requiredDays: number
-  presentDays: number
-  absentDays: number
-  leaveDays: number
-  unpaidLeaveDays: number
-  lateMinutes: number
-  earlyLeaveMinutes: number
-  workedMinutes: number
-  overtimeMinutes: number
-  openRecords: number
-}
-
-export interface MonthCloseReport {
-  periodStart: string
-  periodEnd: string
-  asOf: string
-  shift: {
-    startMinutes: number
-    endMinutes: number
-    graceMinutes: number
-    workDays: number[]
-  }
-  employees: MonthCloseEmployee[]
-  totals: MonthCloseTotals
-}
-
-export interface AuditLogEntry {
-  id: number
-  at: string
-  actor: string
-  entity: string
-  entityId: string | null
-  action: string
-  details: string
-}
-
 export interface AuthSession {
   token: string
   expiresAt: number
@@ -294,6 +223,15 @@ export interface DepartmentCost {
   workedMinutes: number
 }
 
+export interface DepartmentCostTotal {
+  employees: number
+  slips: number
+  netAmountMinor: number
+  overtimeAmountMinor: number
+  overtimeMinutes: number
+  workedMinutes: number
+}
+
 export interface OvertimeTrendPoint {
   monthKey: string
   overtimeMinutes: number
@@ -307,6 +245,7 @@ export interface AbsenceSummary {
   absentDays: number
   rate: number
   activeEmployees: number
+  workingDays: number
   workDaysPerWeek: number
   hasData: boolean
 }
@@ -315,6 +254,7 @@ export interface DashboardInsights {
   generatedAt: string
   range: { fromDate: string; toDate: string; monthStart: string; months: number }
   departmentCosts: DepartmentCost[]
+  departmentCostsTotal: DepartmentCostTotal
   overtimeTrend: OvertimeTrendPoint[]
   payrollTrend: { monthKey: string; netAmountMinor: number }[]
   hoursByEmployee: { id: string; name: string; code: string; department: string; minutes: number }[]

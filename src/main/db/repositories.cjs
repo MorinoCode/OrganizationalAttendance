@@ -819,18 +819,67 @@ function aggregateAttendance({ employeeId, fromDate, toDate, dailyHours = 8 } = 
 }
 
 
+
+function monthKeysEndingAt(today, months = 6) {
+  assertDateKey(today, "Today")
+  const safeMonths = Math.min(24, Math.max(1, Math.round(Number(months) || 6)))
+  const [year, month] = today.split("-").map(Number)
+  const keys = []
+  for (let offset = safeMonths - 1; offset >= 0; offset -= 1) {
+    const date = new Date(year, month - 1 - offset, 1)
+    keys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`)
+  }
+  return keys
+}
+
+
+function absenceSummary({
+  expectedDays = 0,
+  presentDays = 0,
+  leaveDays = 0,
+  activeEmployees = 0,
+  workingDays = 0,
+  workDaysPerWeek = 0
+} = {}) {
+  const toCount = value => Math.max(0, Math.round(Number(value) || 0))
+  const expected = toCount(expectedDays)
+  const present = toCount(presentDays)
+  const leave = toCount(leaveDays)
+  const absent = Math.max(0, expected - present - leave)
+  const rate = expected > 0 ? Math.round((absent / expected) * 1000) / 1000 : 0
+  return {
+    expectedDays: expected,
+    presentDays: present,
+    leaveDays: leave,
+    absentDays: absent,
+    rate,
+    activeEmployees: toCount(activeEmployees),
+    workingDays: toCount(workingDays),
+    workDaysPerWeek: toCount(workDaysPerWeek),
+    hasData: expected > 0 && present + leave > 0
+  }
+}
+
+
+function sumDepartmentCosts(rows = []) {
+  return rows.reduce(
+    (total, row) => ({
+      employees: total.employees + Number(row.employees ?? 0),
+      slips: total.slips + Number(row.slips ?? 0),
+      netAmountMinor: total.netAmountMinor + Number(row.netAmountMinor ?? 0),
+      overtimeAmountMinor: total.overtimeAmountMinor + Number(row.overtimeAmountMinor ?? 0),
+      overtimeMinutes: total.overtimeMinutes + Number(row.overtimeMinutes ?? 0),
+      workedMinutes: total.workedMinutes + Number(row.workedMinutes ?? 0)
+    }),
+    { employees: 0, slips: 0, netAmountMinor: 0, overtimeAmountMinor: 0, overtimeMinutes: 0, workedMinutes: 0 }
+  )
+}
+
 function dashboardInsights({ today = time.localDateKey(), months = 6 } = {}) {
   const db = getDb()
   const settings = shiftSettings(db)
-  const safeMonths = Math.min(24, Math.max(1, Math.round(Number(months) || 6)))
-  assertDateKey(today, "Today")
-
-  const [year, month] = today.split("-").map(Number)
-  const monthKeys = []
-  for (let offset = safeMonths - 1; offset >= 0; offset -= 1) {
-    const date = new Date(year, month - 1 - offset, 1)
-    monthKeys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`)
-  }
+  const monthKeys = monthKeysEndingAt(today, months)
+  const safeMonths = monthKeys.length
   const rangeStart = `${monthKeys[0]}-01`
   const currentMonthStart = `${monthKeys[monthKeys.length - 1]}-01`
   const departmentExpr = "COALESCE(NULLIF(TRIM(p.department), ''), '-')"
@@ -941,7 +990,8 @@ function dashboardInsights({ today = time.localDateKey(), months = 6 } = {}) {
   const activeEmployees = Number(
     db.prepare("SELECT COUNT(*) AS n FROM employees WHERE is_active = 1").get()?.n ?? 0
   )
-  const expectedDays = shift.workingDayKeys(currentMonthStart, today, settings.workDays).length * activeEmployees
+  const workingDays = shift.workingDayKeys(currentMonthStart, today, settings.workDays).length
+  const expectedDays = workingDays * activeEmployees
   const presentDays = Number(
     db
       .prepare(
@@ -978,8 +1028,14 @@ function dashboardInsights({ today = time.localDateKey(), months = 6 } = {}) {
   }
 
   const leaveDays = leaveDates.size
-  const absentDays = Math.max(0, expectedDays - presentDays - leaveDays)
-  const absenceRate = expectedDays > 0 ? absentDays / expectedDays : 0
+  const absence = absenceSummary({
+    expectedDays,
+    presentDays,
+    leaveDays,
+    activeEmployees,
+    workingDays,
+    workDaysPerWeek: settings.workDays.length
+  })
 
   return {
     generatedAt: new Date().toISOString(),
@@ -988,16 +1044,8 @@ function dashboardInsights({ today = time.localDateKey(), months = 6 } = {}) {
     overtimeTrend,
     payrollTrend,
     hoursByEmployee,
-    absence: {
-      expectedDays,
-      presentDays,
-      leaveDays,
-      absentDays,
-      rate: Math.round(absenceRate * 1000) / 1000,
-      activeEmployees,
-      workDaysPerWeek: settings.workDays.length,
-      hasData: expectedDays > 0 && presentDays + leaveDays > 0
-    }
+    departmentCostsTotal: sumDepartmentCosts(departmentCosts),
+    absence
   }
 }
 
@@ -1883,6 +1931,9 @@ module.exports = {
   payslipsPage,
   countPayslips,
   dashboardInsights,
+  monthKeysEndingAt,
+  absenceSummary,
+  sumDepartmentCosts,
   dataCounts,
   logDatabaseRestore,
   importAll

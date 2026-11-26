@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Upload
@@ -18,7 +19,7 @@ import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { LOCALES, formatDateTime, minutesToTime, timeToMinutes } from "../services/date"
 import { useAppStore } from "../store/useAppStore"
-import { AppInfo, AuditLogEntry, BackupEntry, BackupPreview, BackupStatus, CompanySettings, Language, UpdaterStatus } from "../types"
+import { AppInfo, BackupEntry, BackupPreview, BackupStatus, CompanySettings, Language, UpdaterStatus } from "../types"
 import { FeedbackBanner, FeedbackTone } from "../components/FeedbackBanner"
 import { RestorePreviewDialog } from "../components/RestorePreviewDialog"
 import { formatFileSize } from "../services/format"
@@ -26,26 +27,6 @@ import { formatFileSize } from "../services/format"
 interface SettingsPageProps {
   settings: CompanySettings
   onSessionEnded: (message: string) => void
-}
-
-const ACTION_KEYS: Record<string, string> = {
-  created: "common.add",
-  updated: "common.edit",
-  deleted: "common.delete",
-  corrected: "attendance.correct",
-  punch_in: "kiosk.startShift",
-  punch_out: "kiosk.finishShift",
-  break_start: "kiosk.takeBreak",
-  break_end: "kiosk.endBreak",
-  signed: "payroll.markSigned",
-  unsigned: "payroll.markUnsigned",
-  password_changed: "settings.changePassword",
-  restored: "settings.restoreBackup",
-  activated: "employees.activate",
-  deactivated: "employees.deactivate",
-  recalculated: "monthClose.recalculate",
-  absences_marked: "monthClose.markAbsences",
-  absences_cleared: "monthClose.clearAbsences"
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionEnded }) => {
@@ -71,7 +52,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
   const [confirmPassword, setConfirmPassword] = useState("")
 
   const [info, setInfo] = useState<AppInfo | null>(null)
-  const [audit, setAudit] = useState<AuditLogEntry[]>([])
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null)
   const [pendingRestore, setPendingRestore] = useState<
     { source: "file"; selectionId: string; preview: BackupPreview } | { source: "auto"; entry: BackupEntry } | null
@@ -94,9 +74,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
 
   const loadSideData = useCallback(async () => {
     try {
-      const [appInfo, logs, backupInfo] = await Promise.all([api.app.info(), api.audit.list(30), api.backup.status()])
+      const [appInfo, backupInfo] = await Promise.all([api.app.info(), api.backup.status()])
       setInfo(appInfo)
-      setAudit(logs)
       setBackupStatus(backupInfo)
     } catch (caught) {
       handleError(caught)
@@ -700,7 +679,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
                       onClick={() => setPendingRestore({ source: "auto", entry })}
                       className="btn btn-ghost px-2.5 py-1 text-[11px]"
                     >
-                      <History className="h-3 w-3" aria-hidden />
+                      <RotateCcw className="h-3 w-3" aria-hidden />
                       <span>{t("settings.backupRestoreThis")}</span>
                     </button>
                   </span>
@@ -847,42 +826,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
             </dd>
           </div>
         </dl>
-      </div>
-
-      <div className="panel p-7">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] pb-4">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-[#a883c2]" aria-hidden />
-            <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.auditTitle")}</h2>
-          </div>
-          <span className="text-[11px] text-slate-500">{t("settings.auditHint")}</span>
-        </div>
-
-        {audit.length === 0 ? (
-          <p className="py-8 text-center text-xs text-slate-500">{t("settings.auditEmpty")}</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-[rgba(214,186,140,0.08)]">
-            {audit.map(entry => (
-              <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
-                <span className="flex items-center gap-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/70" aria-hidden />
-                  <span className="font-semibold text-slate-200">
-                    {t(ACTION_KEYS[entry.action] ?? "common.edit")}
-                  </span>
-                  <span className="text-slate-500">· {entry.entity}</span>
-                  {entry.entityId && (
-                    <span className="truncate font-mono text-[10px] text-slate-600" dir="ltr">
-                      {entry.entityId.slice(0, 14)}
-                    </span>
-                  )}
-                </span>
-                <span className="font-mono text-[11px] text-slate-500">
-                  {formatDateTime(Date.parse(entry.at), lang)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       <RestorePreviewDialog

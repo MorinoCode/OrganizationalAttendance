@@ -23,7 +23,7 @@ import { cleanPhoneNumber } from "../utils/whatsapp"
 
 interface DashboardOverviewProps {
   settings: CompanySettings
-  onNavigateTab: (tab: "employees" | "attendance" | "leaves" | "payroll" | "monthClose" | "settings") => void
+  onNavigateTab: (tab: "employees" | "attendance" | "payroll" | "settings") => void
   onSessionEnded: (message: string) => void
 }
 
@@ -118,11 +118,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       label: monthLabel(point.monthKey),
       minutes: point.overtimeMinutes,
       hours: minutesToHours(point.overtimeMinutes),
-      amount: point.overtimeAmountMinor
+      amountMinor: point.overtimeAmountMinor,
+      amount: formatMoney(point.overtimeAmountMinor, settings.currency, settings.currencyDecimals, lang)
     }))
     const maxMinutes = Math.max(...items.map(item => item.minutes), 1)
-    return { items, maxMinutes }
-  }, [insights, monthLabel])
+    const totalMinutes = items.reduce((sum, item) => sum + item.minutes, 0)
+    const totalAmountMinor = items.reduce((sum, item) => sum + item.amountMinor, 0)
+    return {
+      items,
+      maxMinutes,
+      totalMinutes,
+      totalHours: minutesToHours(totalMinutes),
+      totalAmountMinor,
+      totalFormatted: formatMoney(totalAmountMinor, settings.currency, settings.currencyDecimals, lang)
+    }
+  }, [insights, monthLabel, settings.currency, settings.currencyDecimals, lang])
 
   const departmentCosts = useMemo(() => {
     const rows = (insights?.departmentCosts ?? []).map(row => ({
@@ -131,11 +141,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       overtimeHours: minutesToHours(row.overtimeMinutes)
     }))
     const maxMinor = Math.max(...rows.map(row => row.netAmountMinor), 1)
-    return { rows, maxMinor }
+    const totalMinor = insights?.departmentCostsTotal.netAmountMinor ?? 0
+    return {
+      rows,
+      maxMinor,
+      totalMinor,
+      totalFormatted: formatMoney(totalMinor, settings.currency, settings.currencyDecimals, lang)
+    }
   }, [insights, settings.currency, settings.currencyDecimals, lang])
 
   const absence = insights?.absence ?? null
   const absencePercent = absence ? Math.round(absence.rate * 1000) / 10 : 0
+  const hasPayrollData = (insights?.departmentCosts.length ?? 0) > 0
 
   const sendWhatsAppPrompt = (employee: Employee) => {
     if (!employee.phone) return
@@ -357,34 +374,38 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </button>
           </div>
 
-          <div className="flex h-56 items-end justify-between gap-3 pt-6">
-            {monthlyPayrollTrends.items.map(m => {
-              const heightPercent = m.totalMinor > 0
-                ? Math.max(15, Math.round((m.totalMinor / monthlyPayrollTrends.maxMinor) * 100))
-                : 6
-              return (
-                <div key={m.key} className="flex flex-1 flex-col items-center justify-end gap-2 group">
-                  <span className="font-mono text-[0.62rem] font-semibold text-[#78dcbc] opacity-0 transition-opacity group-hover:opacity-100">
-                    {m.formatted}
-                  </span>
-                  <div className="w-full max-w-[42px] overflow-hidden rounded-t-lg bg-[rgba(255,246,230,0.06)] h-36 flex items-end">
-                    <div
-                      className="w-full rounded-t-lg bg-[linear-gradient(180deg,#78dcbc,#2ba688)] transition-all duration-500 group-hover:brightness-110"
-                      style={{ height: `${heightPercent}%` }}
-                    />
+          {!hasPayrollData ? (
+            <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
+          ) : (
+            <div className="flex h-56 items-end justify-between gap-3 pt-6">
+              {monthlyPayrollTrends.items.map(m => {
+                const heightPercent = m.totalMinor > 0
+                  ? Math.max(15, Math.round((m.totalMinor / monthlyPayrollTrends.maxMinor) * 100))
+                  : 6
+                return (
+                  <div key={m.key} className="flex flex-1 flex-col items-center justify-end gap-2 group">
+                    <span className="font-mono text-[0.62rem] font-semibold text-[#78dcbc] opacity-0 transition-opacity group-hover:opacity-100">
+                      {m.formatted}
+                    </span>
+                    <div className="w-full max-w-[42px] overflow-hidden rounded-t-lg bg-[rgba(255,246,230,0.06)] h-36 flex items-end">
+                      <div
+                        className="w-full rounded-t-lg bg-[linear-gradient(180deg,#78dcbc,#2ba688)] transition-all duration-500 group-hover:brightness-110"
+                        style={{ height: `${heightPercent}%` }}
+                      />
+                    </div>
+                    <span className="text-[0.68rem] font-semibold text-[#8d8275]">
+                      {m.label}
+                    </span>
                   </div>
-                  <span className="text-[0.68rem] font-semibold text-[#8d8275]">
-                    {m.label}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="panel space-y-4 p-5 lg:col-span-5">
+        <div className="panel space-y-4 p-5 lg:col-span-5" data-testid="department-costs">
           <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(214,171,91,0.35)] bg-[rgba(214,171,91,0.12)] text-[#e6c98a]">
@@ -406,7 +427,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               {departmentCosts.rows.map(row => {
                 const percent = Math.min(100, Math.max(4, Math.round((row.netAmountMinor / departmentCosts.maxMinor) * 100)))
                 return (
-                  <div key={row.department} className="space-y-1">
+                  <div
+                    key={row.department}
+                    className="space-y-1"
+                    data-department={row.department}
+                    data-amount-minor={row.netAmountMinor}
+                    data-overtime-minutes={row.overtimeMinutes}
+                  >
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="truncate font-medium text-[#f4ece0]">
                         {row.department}
@@ -427,11 +454,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   </div>
                 )
               })}
+              <div
+                className="mt-3 flex items-center justify-between border-t border-[color:var(--line)] pt-3 text-xs"
+                data-testid="department-costs-total"
+                data-amount-minor={departmentCosts.totalMinor}
+              >
+                <span className="font-semibold text-[#f4ece0]">{t("dashboard.analytics.total")}</span>
+                <span className="font-mono font-semibold text-[#e6c98a]" dir="ltr">
+                  {departmentCosts.totalFormatted}
+                </span>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="panel space-y-4 p-5 lg:col-span-4">
+        <div className="panel space-y-4 p-5 lg:col-span-4" data-testid="overtime-trend">
           <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(235,160,80,0.35)] bg-[rgba(235,160,80,0.12)] text-[#e6b276]">
@@ -444,34 +481,54 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          {overtimeTrend.items.length === 0 ? (
+          {!hasPayrollData ? (
             <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
           ) : (
-            <div className="flex h-44 items-end justify-between gap-2 pt-4">
-              {overtimeTrend.items.map(item => {
-                const heightPercent = item.minutes > 0
-                  ? Math.max(12, Math.round((item.minutes / overtimeTrend.maxMinutes) * 100))
-                  : 5
-                return (
-                  <div key={item.key} className="group flex flex-1 flex-col items-center justify-end gap-2">
-                    <span className="font-mono text-[0.6rem] font-semibold text-[#e6b276] opacity-0 transition-opacity group-hover:opacity-100">
-                      {item.hours} {t("common.hours")}
-                    </span>
-                    <div className="flex h-28 w-full max-w-[30px] items-end overflow-hidden rounded-t-md bg-[rgba(255,246,230,0.06)]">
-                      <div
-                        className="w-full rounded-t-md bg-[linear-gradient(180deg,#e6b276,#b3762f)] transition-all duration-500 group-hover:brightness-110"
-                        style={{ height: `${heightPercent}%` }}
-                      />
+            <>
+              <div className="flex h-40 items-end justify-between gap-2 pt-4">
+                {overtimeTrend.items.map(item => {
+                  const heightPercent = item.minutes > 0
+                    ? Math.max(12, Math.round((item.minutes / overtimeTrend.maxMinutes) * 100))
+                    : 5
+                  return (
+                    <div
+                      key={item.key}
+                      className="group flex flex-1 flex-col items-center justify-end gap-2"
+                      data-month={item.key}
+                      data-minutes={item.minutes}
+                      data-amount-minor={item.amountMinor}
+                      title={`${item.hours} ${t("common.hours")} · ${item.amount}`}
+                    >
+                      <span className="font-mono text-[0.6rem] font-semibold text-[#e6b276] opacity-0 transition-opacity group-hover:opacity-100">
+                        {item.hours} {t("common.hours")}
+                      </span>
+                      <div className="flex h-24 w-full max-w-[30px] items-end overflow-hidden rounded-t-md bg-[rgba(255,246,230,0.06)]">
+                        <div
+                          className="w-full rounded-t-md bg-[linear-gradient(180deg,#e6b276,#b3762f)] transition-all duration-500 group-hover:brightness-110"
+                          style={{ height: `${heightPercent}%` }}
+                        />
+                      </div>
+                      <span className="text-[0.64rem] font-semibold text-[#8d8275]">{item.label}</span>
                     </div>
-                    <span className="text-[0.64rem] font-semibold text-[#8d8275]">{item.label}</span>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+              <div
+                className="flex items-center justify-between border-t border-[color:var(--line)] pt-3 text-xs"
+                data-testid="overtime-total"
+                data-minutes={overtimeTrend.totalMinutes}
+                data-amount-minor={overtimeTrend.totalAmountMinor}
+              >
+                <span className="text-[#8d8275]">{t("dashboard.analytics.overtimeTotal")}</span>
+                <span className="font-mono font-semibold text-[#e6b276]" dir="ltr">
+                  {overtimeTrend.totalHours} {t("common.hours")} · {overtimeTrend.totalFormatted}
+                </span>
+              </div>
+            </>
           )}
         </div>
 
-        <div className="panel space-y-4 p-5 lg:col-span-3">
+        <div className="panel space-y-4 p-5 lg:col-span-3" data-testid="absence-rate">
           <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(200,95,78,0.35)] bg-[rgba(200,95,78,0.12)] text-[#e9a094]">
@@ -487,7 +544,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           {!absence || !absence.hasData ? (
             <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
           ) : (
-            <div className="space-y-4">
+            <div
+              className="space-y-4"
+              data-rate={absence.rate}
+              data-expected-days={absence.expectedDays}
+              data-present-days={absence.presentDays}
+              data-leave-days={absence.leaveDays}
+              data-absent-days={absence.absentDays}
+              data-working-days={absence.workingDays}
+              data-active-employees={absence.activeEmployees}
+            >
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-3xl font-bold text-[#e9a094]">{absencePercent}%</span>
                 <span className="text-[0.68rem] text-[#8d8275]">
@@ -518,6 +584,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <dd className="font-mono font-semibold text-slate-300">{absence.expectedDays}</dd>
                 </div>
               </dl>
+              <p className="text-[0.64rem] leading-relaxed text-[#8d8275]" data-testid="absence-basis">
+                {t("dashboard.analytics.absenceBasis", {
+                  days: absence.workingDays,
+                  employees: absence.activeEmployees,
+                  expected: absence.expectedDays
+                })}
+              </p>
             </div>
           )}
         </div>

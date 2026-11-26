@@ -2,6 +2,7 @@
 
 import fs from "node:fs"
 import http from "node:http"
+import net from "node:net"
 import path from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { createRequire } from "node:module"
@@ -14,13 +15,40 @@ const vitePort = Number(process.env.SMOKE_VITE_PORT || 5199)
 const cdpPort = Number(process.env.SMOKE_CDP_PORT || 9450)
 const PASSWORD = "Smoke#2026pass"
 const viteBin = path.join(root, "node_modules", "vite", "bin", "vite.js")
+const packaged = process.argv.includes("--packaged")
 
 const children = []
 const startedAt = Date.now()
 const results = []
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 function log(message) {
   console.log(`[smoke] ${message}`)
+}
+
+function assertPortFree(port, label) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.once("error", error =>
+      reject(new Error(`${label} port ${port} is already in use (${error.code}); a previous app instance is still running`))
+    )
+    server.once("listening", () => server.close(() => resolve()))
+    server.listen(port, "127.0.0.1")
+  })
+}
+
+async function waitForPortRelease(port, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      await assertPortFree(port, "CDP")
+      return true
+    } catch {
+      await sleep(300)
+    }
+  }
+  return false
 }
 
 function pass(name, detail) {
@@ -39,7 +67,7 @@ function startProcess(label, command, args, options = {}) {
     cwd: root,
     env: { ...process.env, ...options.env },
     stdio: ["ignore", "pipe", "pipe"],
-    shell: process.platform === "win32"
+    shell: options.shell ?? process.platform === "win32"
   })
   const logFile = path.join(root, ".smoke-tmp", `${label}.log`)
   fs.mkdirSync(path.dirname(logFile), { recursive: true })
@@ -108,14 +136,28 @@ async function warmDevServer() {
   await request(new URL(entry || "/src/renderer/main.tsx", `http://127.0.0.1:${vitePort}/`).toString())
 }
 
+function findPackagedExecutable() {
+  const dir = path.join(root, "release", "win-unpacked")
+  if (!fs.existsSync(dir)) {
+    throw new Error("packaged build not found: run `npm run dist:dir` first")
+  }
+  const executable = fs
+    .readdirSync(dir)
+    .find(name => name.toLowerCase().endsWith(".exe") && name.toLowerCase() !== "elevate.exe")
+  if (!executable) throw new Error(`no application executable in ${path.relative(root, dir)}`)
+  return path.join(dir, executable)
+}
+
+const isAppPage = item => item.type === "page" && /^(http|file):/.test(String(item.url || ""))
+
 async function connectToPage() {
   const targets = await waitFor(async () => {
     const { body } = await request(`http://127.0.0.1:${cdpPort}/json/list`)
     const list = JSON.parse(body)
-    return list.find(item => item.type === "page" && String(item.url || "").startsWith("http")) ? list : null
+    return list.find(isAppPage) ? list : null
   }, "renderer page")
 
-  const target = targets.find(item => item.type === "page" && String(item.url || "").startsWith("http"))
+  const target = targets.find(isAppPage)
   const socket = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => {
     socket.addEventListener("open", resolve)
@@ -229,14 +271,104 @@ function seedDatabase() {
       periodEnd: todayKey,
       workedDays: 1,
       workedMinutes: 8 * 60,
+      overtimeMinutes: 180,
+      overtimeAmountMinor: 3_600,
       baseSalaryMinor: 25_000,
       paymentMethod: "bank_transfer"
     },
     "smoke"
   )
 
+  const previous = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const previousKey = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`
+  repositories.savePayslip(
+    {
+      employeeId: first.id,
+      periodStart: `${previousKey}-01`,
+      periodEnd: `${previousKey}-28`,
+      workedDays: 20,
+      workedMinutes: 20 * 8 * 60,
+      overtimeMinutes: 60,
+      overtimeAmountMinor: 1_200,
+      baseSalaryMinor: 30_000,
+      paymentMethod: "cash"
+    },
+    "smoke"
+  )
+
+  const db = database.getDb()
+  const departmentRows = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(TRIM(department), ''), '-') AS department,
+              COUNT(DISTINCT employee_id) AS employees,
+              COUNT(*) AS slips,
+              SUM(net_amount_minor) AS net,
+              SUM(overtime_minutes) AS overtime_minutes,
+              SUM(overtime_amount_minor) AS overtime_amount_minor
+       FROM payslips
+       GROUP BY department
+       ORDER BY net DESC, department ASC`
+    )
+    .all()
+  const overtimeRows = db
+    .prepare(
+      `SELECT substr(period_start, 1, 7) AS month,
+              SUM(overtime_minutes) AS minutes,
+              SUM(overtime_amount_minor) AS amount
+       FROM payslips
+       GROUP BY month
+       ORDER BY month`
+    )
+    .all()
+  const monthStartKey = `${todayKey.slice(0, 7)}-01`
+  const presentDays = Number(
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM (
+           SELECT a.employee_id, a.record_date
+           FROM attendance_records a
+           JOIN employees e ON e.id = a.employee_id
+           WHERE a.record_date >= ? AND a.record_date <= ? AND a.punch_in_at IS NOT NULL AND e.is_active = 1
+           GROUP BY a.employee_id, a.record_date
+         )`
+      )
+      .get(monthStartKey, todayKey).n
+  )
+  const workingDays = today.getDate() // the smoke seed works every day of the week
+  const activeEmployees = 3
+  const expectedDays = workingDays * activeEmployees
+  const absentDays = Math.max(0, expectedDays - presentDays)
+
+  const expected = {
+    departments: departmentRows.map(row => ({
+      department: String(row.department),
+      employees: Number(row.employees),
+      slips: Number(row.slips),
+      netAmountMinor: Number(row.net),
+      overtimeMinutes: Number(row.overtime_minutes),
+      overtimeAmountMinor: Number(row.overtime_amount_minor)
+    })),
+    totalNetMinor: departmentRows.reduce((total, row) => total + Number(row.net), 0),
+    totalOvertimeMinutes: departmentRows.reduce((total, row) => total + Number(row.overtime_minutes), 0),
+    totalOvertimeAmountMinor: departmentRows.reduce((total, row) => total + Number(row.overtime_amount_minor), 0),
+    overtimeMonths: overtimeRows.map(row => ({
+      month: String(row.month),
+      minutes: Number(row.minutes),
+      amountMinor: Number(row.amount)
+    })),
+    absence: {
+      workingDays,
+      expectedDays,
+      presentDays,
+      leaveDays: 0,
+      absentDays,
+      rate: expectedDays > 0 ? Math.round((absentDays / expectedDays) * 1000) / 1000 : 0,
+      activeEmployees
+    }
+  }
+
   database.closeDatabase()
-  return { first, second, third, payslip, todayKey }
+  return { first, second, third, payslip, todayKey, expected }
 }
 
 async function main() {
@@ -245,19 +377,49 @@ async function main() {
   log(`seeded throwaway database in ${path.relative(root, dataDir)}`)
   console.log(`  PASS  database seed — 2 completed shifts, 1 idle employee, 1 payslip (${seed.payslip.number})`)
 
-  prebundleViteDependencies()
-  pass("vite dependency cache", "pre-bundled with the current lockfile before launch")
+  await assertPortFree(cdpPort, "CDP")
 
-  startProcess("vite", "npx", ["vite", "--host", "127.0.0.1", "--port", String(vitePort), "--strictPort"])
-  await waitFor(async () => (await request(`http://127.0.0.1:${vitePort}/`)).status === 200, "vite dev server")
-  await warmDevServer()
-  pass("vite dev server", `http://127.0.0.1:${vitePort} (entry module pre-compiled)`)
+  if (packaged) {
+    const executable = findPackagedExecutable()
+    startProcess(
+      "app",
+      executable,
+      [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`],
+      {
+        shell: false,
+        env: { APPDATA: path.join(dataDir, "appdata") }
+      }
+    )
+    pass("packaged build", "release/win-unpacked")
+  } else {
+    prebundleViteDependencies()
+    pass("vite dependency cache", "pre-bundled with the current lockfile before launch")
 
-  startProcess("electron", "npx", ["electron", ".", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`], {
-    env: { VITE_DEV_SERVER_URL: `http://127.0.0.1:${vitePort}/` }
-  })
+    startProcess("vite", "npx", ["vite", "--host", "127.0.0.1", "--port", String(vitePort), "--strictPort"])
+    await waitFor(async () => (await request(`http://127.0.0.1:${vitePort}/`)).status === 200, "vite dev server")
+    await warmDevServer()
+    pass("vite dev server", `http://127.0.0.1:${vitePort} (entry module pre-compiled)`)
+
+    startProcess("electron", "npx", ["electron", ".", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`], {
+      env: { VITE_DEV_SERVER_URL: `http://127.0.0.1:${vitePort}/` }
+    })
+  }
+
   const client = await connectToPage()
-  pass("electron window", "renderer attached over CDP")
+  const expectedOrigin = packaged ? "app.asar" : `:${vitePort}`
+  let locationHref = ""
+  const attached = await waitFor(
+    async () => {
+      locationHref = String(await evaluate(client, "location.href"))
+      return locationHref.includes(expectedOrigin) ? locationHref : null
+    },
+    `renderer url containing ${expectedOrigin}`,
+    20_000
+  ).catch(() => null)
+  if (!attached) {
+    fail(packaged ? "packaged window" : "electron window", `attached to an unexpected window: ${locationHref || "unknown"}`)
+  }
+  pass(packaged ? "packaged window" : "electron window", "renderer attached over CDP")
 
   try {
     const boot = await evaluate(
@@ -285,6 +447,34 @@ async function main() {
     )
     if (!boot || boot.stable < 4) fail("app boot", "window never rendered a stable document")
     pass("app boot", "kiosk/login screen rendered from a stable document")
+
+    if (packaged) {
+      const production = await evaluate(
+        client,
+        `({
+          protocol: location.protocol,
+          csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content") ?? null,
+          assets: [...document.querySelectorAll("script[src], link[rel=stylesheet]")].map(node =>
+            new URL(node.getAttribute("src") || node.getAttribute("href"), location.href).href)
+        })`
+      )
+      if (production.protocol !== "file:") {
+        fail("packaged renderer", `expected a file:// document but loaded ${production.protocol}`)
+      }
+      if (
+        !production.csp ||
+        !/default-src 'self'/.test(production.csp) ||
+        !/script-src 'self'/.test(production.csp) ||
+        !/object-src 'none'/.test(production.csp)
+      ) {
+        fail("content security policy", `strict CSP meta missing (${production.csp ?? "none"})`)
+      }
+      if (production.assets.length === 0 || production.assets.some(asset => !asset.startsWith("file:"))) {
+        fail("packaged renderer", `assets did not resolve inside the package: ${production.assets.slice(0, 3).join(", ")}`)
+      }
+      pass("packaged renderer", `file:// entry with ${production.assets.length} relative assets`)
+      pass("content security policy", "strict CSP meta present and assets load from the package")
+    }
 
     const login = await evaluate(
       client,
@@ -369,6 +559,111 @@ async function main() {
     if (!dashboard.hasAbsencePercent) fail("dashboard analytics", "absence rate percentage not rendered")
     if (dashboard.showsEmptyState) fail("dashboard analytics", "panels fell back to the empty state with data present")
     pass("dashboard analytics", `department costs, overtime trend and absence rate rendered (${dashboard.absenceSample})`)
+
+    const reports = await evaluate(
+      client,
+      `(() => {
+        const byId = id => document.querySelector('[data-testid="' + id + '"]')
+        const attr = (element, name) => Number(element?.getAttribute(name))
+        const departments = [...(byId("department-costs")?.querySelectorAll("[data-department]") ?? [])].map(node => ({
+          department: node.getAttribute("data-department"),
+          netAmountMinor: attr(node, "data-amount-minor"),
+          overtimeMinutes: attr(node, "data-overtime-minutes")
+        }))
+        const absencePanel = byId("absence-rate")
+        return {
+          departments,
+          totalNetMinor: attr(byId("department-costs-total"), "data-amount-minor"),
+          overtimeTotalMinutes: attr(byId("overtime-total"), "data-minutes"),
+          overtimeTotalAmountMinor: attr(byId("overtime-total"), "data-amount-minor"),
+          overtimeMonths: [...(byId("overtime-trend")?.querySelectorAll("[data-month]") ?? [])].map(node => ({
+            month: node.getAttribute("data-month"),
+            minutes: attr(node, "data-minutes"),
+            amountMinor: attr(node, "data-amount-minor")
+          })),
+          absence: {
+            rate: attr(absencePanel?.querySelector("[data-rate]"), "data-rate"),
+            expectedDays: attr(absencePanel?.querySelector("[data-expected-days]"), "data-expected-days"),
+            presentDays: attr(absencePanel?.querySelector("[data-present-days]"), "data-present-days"),
+            leaveDays: attr(absencePanel?.querySelector("[data-leave-days]"), "data-leave-days"),
+            absentDays: attr(absencePanel?.querySelector("[data-absent-days]"), "data-absent-days"),
+            workingDays: attr(absencePanel?.querySelector("[data-working-days]"), "data-working-days"),
+            activeEmployees: attr(absencePanel?.querySelector("[data-active-employees]"), "data-active-employees")
+          }
+        }
+      })()`
+    )
+
+    const shownDepartments = reports.departments
+      .map(row => `${row.department}:${row.netAmountMinor}:${row.overtimeMinutes}`)
+      .join("|")
+    const expectedDepartments = seed.expected.departments
+      .map(row => `${row.department}:${row.netAmountMinor}:${row.overtimeMinutes}`)
+      .join("|")
+    const rowTotal = reports.departments.reduce((total, row) => total + row.netAmountMinor, 0)
+    if (shownDepartments !== expectedDepartments) {
+      fail("department cost report", `rendered [${shownDepartments}] but SQL says [${expectedDepartments}]`)
+    }
+    if (reports.totalNetMinor !== seed.expected.totalNetMinor || rowTotal !== seed.expected.totalNetMinor) {
+      fail(
+        "department cost report",
+        `total ${reports.totalNetMinor} vs rows ${rowTotal} vs SQL ${seed.expected.totalNetMinor}`
+      )
+    }
+    if (reports.totalNetMinor <= 0) fail("department cost report", "total cost is zero for seeded payroll")
+    pass(
+      "department cost report",
+      `${reports.departments.length} departments, total ${reports.totalNetMinor} minor units equals the SQL sum`
+    )
+
+    if (
+      reports.overtimeTotalMinutes !== seed.expected.totalOvertimeMinutes ||
+      reports.overtimeTotalAmountMinor !== seed.expected.totalOvertimeAmountMinor
+    ) {
+      fail(
+        "overtime report",
+        `range total ${reports.overtimeTotalMinutes} min / ${reports.overtimeTotalAmountMinor} vs SQL ${seed.expected.totalOvertimeMinutes} min / ${seed.expected.totalOvertimeAmountMinor}`
+      )
+    }
+    const renderedMonths = new Map(reports.overtimeMonths.map(point => [point.month, point]))
+    for (const point of seed.expected.overtimeMonths) {
+      const shown = renderedMonths.get(point.month)
+      if (!shown || shown.minutes !== point.minutes || shown.amountMinor !== point.amountMinor) {
+        fail(
+          "overtime report",
+          `${point.month}: rendered ${shown?.minutes ?? "missing"} min / ${shown?.amountMinor ?? "-"} vs SQL ${point.minutes} min / ${point.amountMinor}`
+        )
+      }
+    }
+    const overtimeMonths = seed.expected.overtimeMonths.filter(point => point.minutes > 0).length
+    if (overtimeMonths < 2 || reports.overtimeTotalMinutes <= 0) {
+      fail("overtime report", `expected a non-zero multi-month overtime series, got ${overtimeMonths} months`)
+    }
+    pass(
+      "overtime report",
+      `${overtimeMonths} non-zero months, ${reports.overtimeTotalMinutes} minutes equals the SQL series`
+    )
+
+    const absence = reports.absence
+    const expectedAbsence = seed.expected.absence
+    if (
+      absence.workingDays !== expectedAbsence.workingDays ||
+      absence.activeEmployees !== expectedAbsence.activeEmployees ||
+      absence.expectedDays !== expectedAbsence.expectedDays ||
+      absence.presentDays !== expectedAbsence.presentDays ||
+      absence.leaveDays !== expectedAbsence.leaveDays ||
+      absence.absentDays !== expectedAbsence.absentDays ||
+      absence.rate !== expectedAbsence.rate
+    ) {
+      fail("absence rate report", `rendered ${JSON.stringify(absence)} but SQL/formula gives ${JSON.stringify(expectedAbsence)}`)
+    }
+    if (absence.rate <= 0 || absence.absentDays <= 0) {
+      fail("absence rate report", "seeded month should show a non-zero absence rate")
+    }
+    pass(
+      "absence rate report",
+      `${absence.absentDays}/${absence.expectedDays} absent days = ${absence.rate} (workingDays x activeEmployees)`
+    )
 
     const kiosk = await evaluate(
       client,
@@ -525,8 +820,10 @@ main()
     }
     process.exitCode = 1
   })
-  .finally(() => {
+  .finally(async () => {
     stopChildren()
+    const released = await waitForPortRelease(cdpPort)
+    if (!released) log(`warning: CDP port ${cdpPort} is still in use after cleanup`)
     setTimeout(() => {
       fs.rmSync(dataDir, { recursive: true, force: true })
       fs.rmSync(path.join(root, ".smoke-tmp"), { recursive: true, force: true })

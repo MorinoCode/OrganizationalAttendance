@@ -2,9 +2,7 @@ import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
-  CalendarDays,
   CheckCircle,
-  ClipboardCheck,
   Clock,
   Coffee,
   FileText,
@@ -20,14 +18,12 @@ import { minutesToHours } from "../services/date"
 import { CompanySettings } from "../types"
 import { EmployeesPage } from "./EmployeesPage"
 import { AttendanceReportsPage } from "./AttendanceReportsPage"
-import { LeavesPage } from "./LeavesPage"
 import { PayrollPage } from "./PayrollPage"
 import { SettingsPage } from "./SettingsPage"
-import { MonthClosePage } from "./MonthClosePage"
 import { DashboardOverview } from "../components/DashboardOverview"
 import { FeedbackBanner } from "../components/FeedbackBanner"
 
-type AdminTab = "overview" | "employees" | "attendance" | "leaves" | "payroll" | "monthClose" | "settings"
+type AdminTab = "overview" | "employees" | "attendance" | "payroll" | "settings"
 
 interface AdminDashboardProps {
   settings: CompanySettings
@@ -84,9 +80,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBack
     { id: "overview", label: t("admin.overview"), icon: <LayoutDashboard className="h-3.5 w-3.5" aria-hidden /> },
     { id: "employees", label: t("admin.employees"), icon: <Users className="h-3.5 w-3.5" aria-hidden /> },
     { id: "attendance", label: t("admin.attendance"), icon: <Clock className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "leaves", label: t("admin.leaves"), icon: <CalendarDays className="h-3.5 w-3.5" aria-hidden /> },
     { id: "payroll", label: t("admin.payroll"), icon: <FileText className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "monthClose", label: t("admin.monthClose"), icon: <ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> },
     { id: "settings", label: t("admin.settings"), icon: <Settings className="h-3.5 w-3.5" aria-hidden /> }
   ]
 
@@ -199,9 +193,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBack
         )}
         {tab === "employees" && <EmployeesPage settings={settings} onSessionEnded={onSessionEnded} />}
         {tab === "attendance" && <AttendanceReportsPage settings={settings} onSessionEnded={onSessionEnded} />}
-        {tab === "leaves" && <LeavesPage settings={settings} onSessionEnded={onSessionEnded} />}
         {tab === "payroll" && <PayrollPage settings={settings} onSessionEnded={onSessionEnded} />}
-        {tab === "monthClose" && <MonthClosePage settings={settings} onSessionEnded={onSessionEnded} />}
         {tab === "settings" && <SettingsPage settings={settings} onSessionEnded={onSessionEnded} />}
       </div>
     </div>

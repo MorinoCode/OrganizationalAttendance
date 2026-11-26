@@ -46,7 +46,6 @@
     "dashboard": "Dashboard",
     "employees": "Employees",
     "attendance": "Attendance & reports",
-    "leaves": "Leaves & absences",
     "payroll": "Payslips",
     "settings": "Settings",
     "sessionExpired": "Your admin session expired. Please sign in again.",
@@ -61,8 +60,7 @@
     "confirmNewPassword": "Confirm new password",
     "confirmNewPasswordPlaceholder": "Confirm new password...",
     "back": "Back",
-    "resetAndLogin": "Reset & Sign In",
-    "monthClose": "Month close"
+    "resetAndLogin": "Reset & Sign In"
   },
   "dashboard": {
     "alerts": {
@@ -85,6 +83,9 @@
       "daysLeave": "Leave days",
       "daysAbsent": "Absent days",
       "daysExpected": "Expected days",
+      "total": "Total",
+      "overtimeTotal": "Range total",
+      "absenceBasis": "Denominator: {{days}} working days × {{employees}} employees = {{expected}} expected days",
       "noData": "No data recorded to display yet."
     }
   },
@@ -159,30 +160,6 @@
     "openShiftsWarning": "{{count}} unfinished shifts are excluded from payroll until closed or corrected.",
     "lateShort": "Late {{minutes}}m",
     "earlyLeaveShort": "Early {{minutes}}m"
-  },
-  "leaves": {
-    "title": "Leaves & absences",
-    "add": "Add leave",
-    "edit": "Edit leave",
-    "employee": "Employee",
-    "type": "Leave type",
-    "types": {
-      "paid": "Paid leave",
-      "unpaid": "Unpaid leave",
-      "sick": "Sick leave",
-      "emergency": "Emergency leave"
-    },
-    "startDate": "From",
-    "endDate": "To",
-    "days": "Days",
-    "dayUnit": "day(s)",
-    "invalidRange": "End date must be on or after the start date.",
-    "paid": "Paid",
-    "unpaid": "Unpaid",
-    "reason": "Reason",
-    "noRecords": "No leave records yet.",
-    "confirmDelete": "Delete this leave record?",
-    "summaryLine": "{{count}} records • {{days}} days • {{unpaid}} unpaid days"
   },
   "payroll": {
     "title": "Payslips",
@@ -330,9 +307,6 @@
       "downloadButton": "Download Update",
       "installButton": "Restart & Install"
     },
-    "auditTitle": "Audit log",
-    "auditEmpty": "No recorded changes",
-    "auditHint": "Recent administrative changes to attendance, payroll and settings.",
     "savedBackupTo": "Backup saved to: {{path}}",
     "language": "Language",
     "shiftSection": "Shift & schedule",
@@ -434,34 +408,5 @@
     "password_mismatch": "Passwords do not match.",
     "invalid_shift_range": "Invalid shift schedule: the end must be after the start.",
     "invalid_work_days": "Select at least one working day."
-  },
-  "monthClose": {
-    "title": "Month close",
-    "subtitle": "Payroll readiness: required days vs attendance, absence, leave and lateness for each employee.",
-    "period": "Period",
-    "shiftLine": "Shift {{start}} – {{end}} · grace {{grace}} min",
-    "employee": "Employee",
-    "required": "Required",
-    "present": "Present",
-    "absent": "Absent",
-    "leaveDays": "Leave",
-    "unpaid": "Unpaid days",
-    "late": "Late",
-    "earlyLeave": "Left early",
-    "worked": "Worked",
-    "overtime": "Overtime",
-    "open": "Open shift",
-    "openWarning": "{{count}} shift(s) in this period are still open and are excluded from worked hours until clocked out.",
-    "recalculate": "Recompute lateness",
-    "recalculated": "Updated {{count}} record(s).",
-    "markAbsences": "Record absences",
-    "absencesMarked": "Recorded {{count}} absence day(s).",
-    "clearAbsences": "Remove recorded absences",
-    "absencesCleared": "Removed {{count}} absence record(s).",
-    "confirmMark": "Every working day without a punch and without leave will be recorded as absence. Continue?",
-    "confirmClear": "Recorded absences in this period will be deleted (rows without punches only). Continue?",
-    "empty": "No data for this period.",
-    "lateHours": "Late (hours)",
-    "asOf": "Up to {{date}}"
   }
 }
