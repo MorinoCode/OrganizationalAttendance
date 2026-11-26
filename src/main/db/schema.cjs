@@ -1,7 +1,7 @@
 "use strict"
 
 
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS company_settings (
@@ -44,9 +44,7 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   status        TEXT    NOT NULL CHECK (status IN ('present', 'on_break', 'completed', 'absent')),
   notes         TEXT    NOT NULL DEFAULT '',
   created_at    TEXT    NOT NULL,
-  updated_at    TEXT    NOT NULL,
-  -- One shift per employee per day: removes the duplicate-record class of bugs.
-  UNIQUE (employee_id, record_date)
+  updated_at    TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS break_logs (
@@ -236,11 +234,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_payslips_employee_period
   ON payslips (employee_id, period_start, period_end);
 `
 
+const MIGRATION_V5 = `
+CREATE TABLE IF NOT EXISTS attendance_records_v5 (
+  id                  TEXT    PRIMARY KEY,
+  employee_id         TEXT    NOT NULL REFERENCES employees (id) ON DELETE CASCADE,
+  record_date         TEXT    NOT NULL,
+  punch_in_at         INTEGER,
+  punch_out_at        INTEGER,
+  break_minutes       INTEGER NOT NULL DEFAULT 0 CHECK (break_minutes >= 0),
+  net_minutes         INTEGER NOT NULL DEFAULT 0 CHECK (net_minutes >= 0),
+  status              TEXT    NOT NULL CHECK (status IN ('present', 'on_break', 'completed', 'absent')),
+  notes               TEXT    NOT NULL DEFAULT '',
+  created_at          TEXT    NOT NULL,
+  updated_at          TEXT    NOT NULL,
+  late_minutes        INTEGER NOT NULL DEFAULT 0,
+  early_leave_minutes INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT INTO attendance_records_v5 (
+  id, employee_id, record_date, punch_in_at, punch_out_at, break_minutes, net_minutes, status, notes, created_at, updated_at, late_minutes, early_leave_minutes
+)
+SELECT
+  id, employee_id, record_date, punch_in_at, punch_out_at, break_minutes, net_minutes, status, notes, created_at, updated_at, late_minutes, early_leave_minutes
+FROM attendance_records;
+
+DROP TABLE attendance_records;
+ALTER TABLE attendance_records_v5 RENAME TO attendance_records;
+
+CREATE INDEX IF NOT EXISTS idx_attendance_date       ON attendance_records (record_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_employee   ON attendance_records (employee_id, record_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_status     ON attendance_records (status);
+`
+
 const MIGRATIONS = [
   { version: 1, sql: MIGRATION_V1 },
   { version: 2, sql: MIGRATION_V2 },
   { version: 3, sql: MIGRATION_V3 },
-  { version: 4, sql: MIGRATION_V4 }
+  { version: 4, sql: MIGRATION_V4 },
+  { version: 5, sql: MIGRATION_V5 }
 ]
 
 function getUserVersion(db) {
@@ -273,6 +304,7 @@ function runMigrations(db) {
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= current) continue
+    db.exec("PRAGMA foreign_keys = OFF")
     db.exec("BEGIN IMMEDIATE")
     try {
       db.exec(migration.sql)
@@ -285,6 +317,8 @@ function runMigrations(db) {
       } catch {
       }
       throw error
+    } finally {
+      db.exec("PRAGMA foreign_keys = ON")
     }
   }
 

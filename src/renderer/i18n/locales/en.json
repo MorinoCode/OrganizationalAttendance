@@ -31,7 +31,8 @@
     "openAdmin": "Open admin panel",
     "addEmployees": "Add employees in admin",
     "liveTimer": "Worked so far",
-    "lateSuccess": "Clocked in at {{time}} — {{minutes}} min late"
+    "lateSuccess": "Clocked in at {{time}} — {{minutes}} min late",
+    "shiftsCount": "shifts today"
   },
   "admin": {
     "access": "Admin panel",

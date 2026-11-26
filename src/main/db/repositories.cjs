@@ -547,22 +547,31 @@ function punchIn(employeeId, { now = Date.now(), actor } = {}) {
     if (!employee) throw appError("employee_not_found", "Employee not found.")
     if (!Number(employee.is_active)) throw appError("employee_inactive", "Employee is not active.")
 
-    const recordDate = time.localDateKey(now)
-    const existing = db
-      .prepare("SELECT * FROM attendance_records WHERE employee_id = ? AND record_date = ?")
-      .get(employee.id, recordDate)
+    const openRecord = db
+      .prepare(`
+        SELECT * FROM attendance_records
+        WHERE employee_id = ? AND punch_in_at IS NOT NULL AND punch_out_at IS NULL
+        ORDER BY punch_in_at DESC LIMIT 1
+      `)
+      .get(employee.id)
 
-    if (existing) {
-      if (existing.punch_out_at !== null) {
-        throw appError("attendance_already_completed", "Today's shift is already closed.")
-      }
-      return attendanceResult(db, existing.id)
+    if (openRecord) {
+      return attendanceResult(db, openRecord.id)
     }
+
+    const recordDate = time.localDateKey(now)
+    db.prepare("DELETE FROM attendance_records WHERE employee_id = ? AND record_date = ? AND status = 'absent' AND punch_in_at IS NULL")
+      .run(employee.id, recordDate)
 
     const id = newId("att")
     const stamp = nowIso()
     const schedule = shiftSettings(db)
-    const lateMinutes = shift.isWorkingDay(recordDate, schedule.workDays)
+    const priorShifts = db
+      .prepare("SELECT COUNT(*) AS total FROM attendance_records WHERE employee_id = ? AND record_date = ? AND punch_in_at IS NOT NULL")
+      .get(employee.id, recordDate)
+    const isFirstShiftToday = Number(priorShifts?.total ?? 0) === 0
+
+    const lateMinutes = (isFirstShiftToday && shift.isWorkingDay(recordDate, schedule.workDays))
       ? shift.lateMinutesFor({
         punchInAt: now,
         recordDate,
@@ -791,20 +800,32 @@ function aggregateAttendance({ employeeId, fromDate, toDate, dailyHours = 8 } = 
 
   const row = getDb()
     .prepare(`
+      WITH daily_groups AS (
+        SELECT
+          a.employee_id,
+          a.record_date,
+          COUNT(*) AS day_total,
+          MAX(CASE WHEN a.punch_out_at IS NOT NULL THEN 1 ELSE 0 END) AS is_worked_day,
+          SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.net_minutes ELSE 0 END) AS day_worked_minutes,
+          SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.break_minutes ELSE 0 END) AS day_break_minutes,
+          SUM(CASE WHEN a.punch_in_at IS NOT NULL AND a.punch_out_at IS NULL THEN 1 ELSE 0 END) AS day_open_records
+        FROM attendance_records a
+        JOIN employees e ON e.id = a.employee_id
+        ${where}
+        GROUP BY a.employee_id, a.record_date
+      )
       SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN 1 ELSE 0 END) AS worked_days,
-        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.net_minutes ELSE 0 END) AS worked_minutes,
-        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.break_minutes ELSE 0 END) AS break_minutes,
-        SUM(CASE WHEN a.punch_out_at IS NOT NULL AND a.net_minutes > ? THEN a.net_minutes - ? ELSE 0 END) AS overtime_minutes,
-        SUM(CASE WHEN a.punch_in_at IS NOT NULL AND a.punch_out_at IS NULL THEN 1 ELSE 0 END) AS open_records,
-        MIN(a.record_date) AS first_date,
-        MAX(a.record_date) AS last_date
-      FROM attendance_records a
-      JOIN employees e ON e.id = a.employee_id
-      ${where}
+        COALESCE(SUM(day_total), 0) AS total,
+        COALESCE(SUM(is_worked_day), 0) AS worked_days,
+        COALESCE(SUM(day_worked_minutes), 0) AS worked_minutes,
+        COALESCE(SUM(day_break_minutes), 0) AS break_minutes,
+        COALESCE(SUM(CASE WHEN day_worked_minutes > ? THEN day_worked_minutes - ? ELSE 0 END), 0) AS overtime_minutes,
+        COALESCE(SUM(day_open_records), 0) AS open_records,
+        MIN(record_date) AS first_date,
+        MAX(record_date) AS last_date
+      FROM daily_groups
     `)
-    .get(contracted, contracted, ...params)
+    .get(...params, contracted, contracted)
 
   return {
     workedDays: Number(row?.worked_days ?? 0),
@@ -1617,7 +1638,6 @@ function markAbsences({ fromDate, toDate, actor } = {}) {
       INSERT INTO attendance_records
         (id, employee_id, record_date, punch_in_at, punch_out_at, break_minutes, net_minutes, status, notes, created_at, updated_at, late_minutes, early_leave_minutes)
       VALUES (?, ?, ?, NULL, NULL, 0, 0, 'absent', '', ?, ?, 0, 0)
-      ON CONFLICT (employee_id, record_date) DO NOTHING
     `)
 
     const stamp = nowIso()

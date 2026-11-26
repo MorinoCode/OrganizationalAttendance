@@ -31,7 +31,8 @@
     "openAdmin": "الدخول إلى لوحة الإدارة",
     "addEmployees": "إضافة موظفين من الإدارة",
     "liveTimer": "ساعات العمل الحالية",
-    "lateSuccess": "تم تسجيل الدخول {{time}} — تأخير {{minutes}} دقيقة"
+    "lateSuccess": "تم تسجيل الدخول {{time}} — تأخير {{minutes}} دقيقة",
+    "shiftsCount": "ورديات اليوم"
   },
   "admin": {
     "access": "لوحة الإدارة",

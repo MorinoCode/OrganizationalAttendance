@@ -74,17 +74,28 @@ describe("attendance flow", () => {
     expect(finished.breaks[0].breakEndAt).not.toBeNull()
   })
 
-  it("refuses a second punch-in for an already closed day", () => {
+  it("allows a second shift punch-in on the same day and aggregates daily hours", () => {
     const employee = seedEmployee()
     const start = new Date(2026, 10, 25, 8, 0, 0).getTime()
     repositories.punchIn(employee.id, { now: start })
-    repositories.punchOut(employee.id, { now: start + 8 * HOUR })
+    repositories.punchOut(employee.id, { now: start + 4 * HOUR })
 
-    expectCode(
-      () => repositories.punchIn(employee.id, { now: start + 9 * HOUR }),
-      "attendance_already_completed"
-    )
-    expect(repositories.listAttendance({ employeeId: employee.id })).toHaveLength(1)
+    const second = repositories.punchIn(employee.id, { now: start + 6 * HOUR })
+    expect(second.status).toBe("present")
+    repositories.punchOut(employee.id, { now: start + 11 * HOUR })
+
+    const list = repositories.listAttendance({ employeeId: employee.id })
+    expect(list).toHaveLength(2)
+
+    const summary = repositories.aggregateAttendance({
+      employeeId: employee.id,
+      fromDate: "2026-11-25",
+      toDate: "2026-11-25",
+      dailyHours: 8
+    })
+    expect(summary.workedDays).toBe(1)
+    expect(summary.workedMinutes).toBe(9 * 60)
+    expect(summary.overtimeMinutes).toBe(60)
   })
 
   it("is idempotent while a shift is still open", () => {
@@ -484,7 +495,7 @@ describe("schema migrations", () => {
       .map((column: { name: string }) => column.name)
     expect(columns).toContain("late_minutes")
     expect(columns).toContain("early_leave_minutes")
-    expect(schema.SCHEMA_VERSION).toBe(4)
+    expect(schema.SCHEMA_VERSION).toBe(5)
 
     database.closeDatabase()
     fs.rmSync(dir, { recursive: true, force: true })

@@ -82,7 +82,21 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
   }, [employees, query])
 
   const selected = employees.find(employee => employee.id === selectedId) ?? null
-  const record = selected ? todayRecords.find(item => item.employeeId === selected.id) : undefined
+  const selectedRecords = useMemo(
+    () => (selected ? todayRecords.filter(item => item.employeeId === selected.id) : []),
+    [selected, todayRecords]
+  )
+  const activeRecord = selectedRecords.find(item => !item.punchOutAt)
+  const latestRecord = selectedRecords[0]
+  const record = activeRecord || latestRecord
+  const totalNetToday = useMemo(
+    () => selectedRecords.reduce((sum, r) => sum + r.netMinutes, 0),
+    [selectedRecords]
+  )
+  const totalBreakToday = useMemo(
+    () => selectedRecords.reduce((sum, r) => sum + r.breakMinutes, 0),
+    [selectedRecords]
+  )
 
   const hoursUnit = t("common.hours")
   const minutesUnit = t("common.minutes")
@@ -188,7 +202,7 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
   }
 
   const isBusy = busyEmployeeId !== null
-  const hasShift = Boolean(record && !record.punchOutAt)
+  const hasShift = Boolean(activeRecord)
 
   return (
     <div className="mx-auto max-w-[88rem] px-4 py-7 sm:px-8">
@@ -230,7 +244,9 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
               <p className="py-16 text-center text-xs text-[#7b7063]">{t("common.noData")}</p>
             ) : (
               filtered.map(employee => {
-                const employeeRecord = todayRecords.find(item => item.employeeId === employee.id)
+                const employeeRecords = todayRecords.filter(item => item.employeeId === employee.id)
+                const active = employeeRecords.find(item => !item.punchOutAt)
+                const employeeRecord = active || employeeRecords[0]
                 const isSelected = selected?.id === employee.id
                 return (
                   <button
@@ -296,6 +312,11 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
                         {selected.fullName}
                       </h2>
                       {statusChip(record)}
+                      {selectedRecords.length > 1 && (
+                        <span className="chip border-[rgba(214,171,91,0.35)] bg-[rgba(214,171,91,0.1)] text-[#e6c98a]">
+                          {selectedRecords.length} {t("kiosk.shiftsCount")}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1.5 flex items-center gap-2 text-[0.72rem] font-medium text-[#9d9182]">
                       <span className="rounded-md border border-[color:var(--line)] bg-[rgba(255,246,230,0.04)] px-2 py-0.5 font-mono text-[#e6c98a]">
@@ -322,7 +343,7 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
                   },
                   {
                     label: t("attendance.breakMinutes"),
-                    value: String(record?.breakMinutes ?? 0),
+                    value: String(totalBreakToday),
                     icon: <Coffee className="h-3.5 w-3.5" aria-hidden />,
                     tone: "text-[#e6b276]"
                   },
@@ -333,10 +354,12 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
                     tone: "text-[#e6c98a]"
                   },
                   {
-                    label: record && !record.punchOutAt ? t("kiosk.liveTimer") : t("attendance.netHours"),
-                    value: record
+                    label: activeRecord ? t("kiosk.liveTimer") : t("attendance.netHours"),
+                    value: selectedRecords.length > 0
                       ? formatDuration(
-                          record.punchOutAt ? record.netMinutes : liveMinutes(record, now),
+                          activeRecord
+                            ? (totalNetToday + liveMinutes(activeRecord, now))
+                            : totalNetToday,
                           hoursUnit,
                           minutesUnit
                         )

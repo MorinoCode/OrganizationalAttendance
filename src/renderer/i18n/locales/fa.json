@@ -31,7 +31,8 @@
     "openAdmin": "ورود به پنل مدیریت",
     "addEmployees": "افزودن کارمند از پنل مدیریت",
     "liveTimer": "ساعات کار تا این لحظه",
-    "lateSuccess": "ورود در {{time}} ثبت شد — {{minutes}} دقیقه تأخیر"
+    "lateSuccess": "ورود در {{time}} ثبت شد — {{minutes}} دقیقه تأخیر",
+    "shiftsCount": "شیفت امروز"
   },
   "admin": {
     "access": "پنل مدیریت",
