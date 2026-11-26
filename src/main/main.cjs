@@ -2,7 +2,9 @@
 
 const path = require("node:path")
 const fs = require("node:fs")
-const { app, BrowserWindow, dialog, session, shell } = require("electron")
+const { app, BrowserWindow, dialog, nativeTheme, session, shell } = require("electron")
+
+nativeTheme.themeSource = "dark"
 
 const { initDatabase, closeDatabase, getDatabasePath } = require("./db/index.cjs")
 const { registerIpcHandlers, cancelActiveExports, discardActiveExports } = require("./ipc.cjs")

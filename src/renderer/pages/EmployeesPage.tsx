@@ -389,10 +389,11 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ settings, onSessio
                     id="employee-salary-type"
                     value={form.salaryType}
                     onChange={event => setForm({ ...form, salaryType: event.target.value as SalaryType })}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
+                    style={{ colorScheme: "dark", backgroundColor: "#14110d" }}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-[#14110d] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
                   >
                     {SALARY_TYPES.map(type => (
-                      <option key={type} value={type} className="bg-[#14110d] text-[#f4ece0]">
+                      <option key={type} value={type} style={{ backgroundColor: "#14110d", color: "#f4ece0" }} className="bg-[#14110d] text-[#f4ece0]">
                         {t(`employees.salaryTypes.${type}`)}
                       </option>
                     ))}

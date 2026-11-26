@@ -85,11 +85,15 @@
 
   select {
     color-scheme: dark;
+    background-color: #14110d;
+    color: #f4ece0;
   }
 
-  select option {
-    background-color: var(--ink-900);
-    color: var(--cream);
+  select option,
+  select optgroup {
+    color-scheme: dark;
+    background-color: #14110d;
+    color: #f4ece0;
   }
 
   input[type="checkbox"],
@@ -350,4 +354,19 @@
   .no-print {
     display: none !important;
   }
+}
+
+select,
+select option,
+select optgroup {
+  color-scheme: dark !important;
+  background-color: #14110d !important;
+  color: #f4ece0 !important;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+  background-color: #241f18 !important;
+  color: #ffffff !important;
 }
