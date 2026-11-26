@@ -92,7 +92,8 @@
     "publish": {
       "provider": "github",
       "owner": "MorinoCode",
-      "repo": "OrganizationalAttendance"
+      "repo": "OrganizationalAttendance",
+      "releaseType": "release"
     }
   }
 }
