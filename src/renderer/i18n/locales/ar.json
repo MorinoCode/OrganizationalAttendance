@@ -89,13 +89,6 @@
       "noData": "لا توجد بيانات مسجلة للعرض بعد."
     }
   },
-  "stats": {
-    "totalEmployees": "إجمالي الموظفين",
-    "activeToday": "الحاضرون اليوم",
-    "onBreakNow": "في استراحة الآن",
-    "completedToday": "أنهوا الدوام",
-    "totalHoursWorked": "ساعات العمل اليوم"
-  },
   "employees": {
     "addEmployee": "إضافة موظف",
     "editEmployee": "تعديل بيانات الموظف",
