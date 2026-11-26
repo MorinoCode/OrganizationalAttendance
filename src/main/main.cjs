@@ -107,7 +107,15 @@ if (!gotSingleInstanceLock) {
     } catch (error) {
       const detail = toErrorPayload(error)
       console.error("[db] failed to open database:", detail)
-      dialog.showErrorBox("Database error", `${detail.code}: ${detail.message}`)
+      const isNewerSchema = String(detail.message || "").includes("is newer than this application")
+      if (isNewerSchema) {
+        dialog.showErrorBox(
+          "نیاز به به‌روزرسانی برنامه / Update Required",
+          "پایگاه‌داده این سیستم به نسخه جدیدتری ارتقا یافته است و این نسخه قدیمی برنامه امکان اجرای آن را ندارد.\nلطفاً آخرین نسخه برنامه را نصب یا اجرا کنید.\n\nDatabase schema is newer than this application. Please run or install the updated version."
+        )
+      } else {
+        dialog.showErrorBox("Database error", `${detail.code}: ${detail.message}`)
+      }
       app.quit()
       return
     }
