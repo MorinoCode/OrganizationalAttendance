@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import {
   AlertCircle,
   CheckCircle2,
-  Database,
   Download,
   History,
   KeyRound,
@@ -801,31 +800,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="panel p-7">
-        <div className="flex items-center gap-2 border-b border-[color:var(--line)] pb-4">
-          <Database className="h-4 w-4 text-[#d6ab5b]" aria-hidden />
-          <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.appInfo")}</h2>
-        </div>
-        <dl className="mt-5 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-slate-400">{t("settings.version")}</dt>
-            <dd className="font-mono text-slate-200">{info?.version ?? "-"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-400">{t("settings.runtime")}</dt>
-            <dd className="font-mono text-slate-200">
-              Electron {info?.electron ?? "-"} · Node {info?.node ?? "-"}
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs text-slate-400">{t("settings.databasePath")}</dt>
-            <dd className="break-all font-mono text-xs text-slate-300" dir="ltr">
-              {info?.databasePath ?? "-"}
-            </dd>
-          </div>
-        </dl>
       </div>
 
       <RestorePreviewDialog
