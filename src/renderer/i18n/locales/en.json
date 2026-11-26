@@ -360,6 +360,18 @@
     "notice": "Notice",
     "error": "Error"
   },
+  "ai": {
+    "button": "AI Assistant",
+    "buttonHint": "Chat with Platform AI Assistant",
+    "title": "Platform AI Assistant",
+    "subtitle": "Instant answers for attendance, payroll, reports, and settings",
+    "placeholder": "Ask any question about the platform...",
+    "send": "Send",
+    "thinking": "Analyzing and generating response...",
+    "clearChat": "Clear chat",
+    "welcome": "Hello! I am the platform's AI Assistant. Feel free to ask me anything about attendance logging, payroll calculation, Excel reports, backups, or settings.",
+    "suggestedTitle": "Popular Questions:"
+  },
   "errors": {
     "unauthorized": "Your admin session expired. Please sign in again.",
     "invalid_password": "Incorrect password.",

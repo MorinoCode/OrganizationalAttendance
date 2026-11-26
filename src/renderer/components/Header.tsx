@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Calendar, Clock, Globe, LogIn, LogOut, ShieldCheck } from "lucide-react"
+import { Calendar, Clock, Globe, LogIn, LogOut, ShieldCheck, Sparkles } from "lucide-react"
 
 import { BrandLogo } from "./BrandLogo"
+import { AIAssistantModal } from "./AIAssistantModal"
 
 import { setAppLanguage } from "../i18n/config"
 import { CompanySettings, Language } from "../types"
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate
 }) => {
   const { t, i18n } = useTranslation()
+  const [aiOpen, setAiOpen] = useState(false)
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
@@ -93,6 +95,16 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setAiOpen(true)}
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-[rgba(214,171,91,0.45)] bg-[linear-gradient(135deg,rgba(214,171,91,0.2),rgba(214,171,91,0.04))] px-3 text-xs font-bold text-[#f4ece0] shadow-[0_0_15px_rgba(214,171,91,0.15)] transition-all hover:border-[rgba(214,171,91,0.8)] hover:bg-[linear-gradient(135deg,rgba(214,171,91,0.3),rgba(214,171,91,0.08))] hover:text-[#ffd885] hover:shadow-[0_0_20px_rgba(214,171,91,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(214,171,91,0.5)]"
+            title={t("ai.buttonHint")}
+          >
+            <Sparkles className="h-4 w-4 animate-pulse text-[#ffe49e]" aria-hidden />
+            <span className="hidden sm:inline">{t("ai.button")}</span>
+          </button>
+
           <div className="flex items-center gap-0.5 rounded-xl border border-[color:var(--line)] bg-[rgba(20,17,13,0.75)] p-1">
             <Globe className="mx-1 hidden h-3.5 w-3.5 text-[#7b7063] sm:block" aria-hidden />
             {LANGS.map(lang => (
@@ -137,6 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+      <AIAssistantModal isOpen={aiOpen} onClose={() => setAiOpen(false)} />
     </header>
   )
 }
