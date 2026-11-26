@@ -44,6 +44,16 @@ function minutesToHours(minutes: number): number {
   return Math.round(((Number(minutes) || 0) / 60) * 100) / 100
 }
 
+function formatDuration(minutes: number, hourUnit = "h", minuteUnit = "m"): string {
+  const total = Math.max(0, Math.round(Number(minutes) || 0))
+  const hours = Math.floor(total / 60)
+  const rest = total % 60
+  if (hours === 0 && rest === 0) return `0 ${minuteUnit}`
+  if (hours === 0) return `${rest} ${minuteUnit}`
+  if (rest === 0) return `${hours} ${hourUnit}`
+  return `${hours} ${hourUnit} ${rest} ${minuteUnit}`
+}
+
 function decimalsOf(decimals: number): number {
   return Math.min(4, Math.max(0, Math.round(Number(decimals))))
 }
@@ -152,7 +162,7 @@ describe("streaming Excel export", () => {
 
     const totalRow = sheet.getRow(attendanceSpec.headerRowIndex + 1 + expectedRows)
     expect(totalRow.getCell(1).value).toBe("Total")
-    expect(Number(totalRow.getCell(7).value)).toBeCloseTo(minutesToHours(summary.workedMinutes), 6)
+    expect(String(totalRow.getCell(7).value)).toBe(formatDuration(summary.workedMinutes, "h", "m"))
     expect(Number(totalRow.getCell(6).value)).toBe(summary.breakMinutes)
     expect(sheet.rowCount).toBe(attendanceSpec.headerRowIndex + 1 + expectedRows)
   }, 120000)

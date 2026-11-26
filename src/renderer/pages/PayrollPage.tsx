@@ -748,7 +748,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                       <td className="p-3 font-semibold">{t("payroll.baseAmount")}</td>
                       <td className="p-3 text-center font-mono text-xs">
                         {selectedPayslip.workedDays} {t("payroll.workedDays")} ·{" "}
-                        {minutesToHours(selectedPayslip.workedMinutes)} {t("common.hours")}
+                        {formatDuration(selectedPayslip.workedMinutes, t("common.hours"), t("common.minutes"))}
                       </td>
                       <td className="p-3 text-end font-mono font-bold">
                         {money(selectedPayslip.baseSalaryMinor)}
@@ -758,7 +758,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                       <tr>
                         <td className="p-3">{t("payroll.overtime")}</td>
                         <td className="p-3 text-center font-mono text-xs">
-                          {minutesToHours(selectedPayslip.overtimeMinutes)} {t("common.hours")}
+                          {formatDuration(selectedPayslip.overtimeMinutes, t("common.hours"), t("common.minutes"))}
                         </td>
                         <td className="p-3 text-end font-mono font-bold text-emerald-700">
                           +{money(selectedPayslip.overtimeAmountMinor)}
@@ -942,7 +942,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-medium text-slate-400">{t("payroll.workedSummary", {
                     days: form.workedDays,
-                    hours: minutesToHours(form.workedMinutes)
+                    hours: formatDuration(form.workedMinutes, t("common.hours"), t("common.minutes"))
                   })}</span>
                   <button
                     type="button"

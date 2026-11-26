@@ -16,7 +16,7 @@ import {
 
 import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
-import { addDays, formatDate, minutesToHours, monthStartKey, todayKey } from "../services/date"
+import { addDays, formatDate, formatDuration, minutesToHours, monthStartKey, todayKey } from "../services/date"
 import { formatMoney } from "../services/money"
 import { AttendanceRecord, CompanySettings, DashboardInsights, Employee, Language } from "../types"
 import { cleanPhoneNumber } from "../utils/whatsapp"
@@ -334,7 +334,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <span className="font-mono text-[0.68rem] text-[#8d8275]">({item.code})</span>
                       </span>
                       <span className="font-mono font-semibold text-[#e6c98a]">
-                        {item.hours} {t("common.hours")}
+                        {formatDuration(item.minutes, t("common.hours"), t("common.minutes"))}
                       </span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(255,246,230,0.06)]">
@@ -497,10 +497,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                       data-month={item.key}
                       data-minutes={item.minutes}
                       data-amount-minor={item.amountMinor}
-                      title={`${item.hours} ${t("common.hours")} · ${item.amount}`}
+                      title={`${formatDuration(item.minutes, t("common.hours"), t("common.minutes"))} · ${item.amount}`}
                     >
                       <span className="font-mono text-[0.6rem] font-semibold text-[#e6b276] opacity-0 transition-opacity group-hover:opacity-100">
-                        {item.hours} {t("common.hours")}
+                        {formatDuration(item.minutes, t("common.hours"), t("common.minutes"))}
                       </span>
                       <div className="flex h-24 w-full max-w-[30px] items-end overflow-hidden rounded-t-md bg-[rgba(255,246,230,0.06)]">
                         <div
@@ -521,7 +521,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               >
                 <span className="text-[#8d8275]">{t("dashboard.analytics.overtimeTotal")}</span>
                 <span className="font-mono font-semibold text-[#e6b276]" dir="ltr">
-                  {overtimeTrend.totalHours} {t("common.hours")} · {overtimeTrend.totalFormatted}
+                  {formatDuration(overtimeTrend.totalMinutes, t("common.hours"), t("common.minutes"))} · {overtimeTrend.totalFormatted}
                 </span>
               </div>
             </>

@@ -142,6 +142,8 @@ export interface ExcelExportSpec {
   summaryLabel?: string
   currency?: string
   decimals?: number
+  hourUnit?: string
+  minuteUnit?: string
 }
 
 export interface PagedResult<T> {

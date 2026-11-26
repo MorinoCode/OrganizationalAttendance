@@ -59,6 +59,8 @@ export async function exportAttendanceExcel(
     fileName: `${t("attendance.fileName")}_${options.fromDate ?? ""}_${options.toDate ?? ""}.xlsx`,
     totalLabel: t("common.total"),
     showEmployee,
+    hourUnit: t("common.hours"),
+    minuteUnit: t("common.minutes"),
     statusLabels: {
       present: t("kiosk.status.working"),
       on_break: t("kiosk.status.onBreak"),
@@ -113,7 +115,9 @@ export async function exportPayslipsExcel(
     unsignedLabel: t("payroll.unsigned"),
     summaryLabel: t("payroll.netAmount"),
     currency: settings.currency,
-    decimals: settings.currencyDecimals
+    decimals: settings.currencyDecimals,
+    hourUnit: t("common.hours"),
+    minuteUnit: t("common.minutes")
   }
 
   return api.exporter.payslips(options.id, filter as Record<string, unknown>, spec)

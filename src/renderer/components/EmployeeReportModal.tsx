@@ -5,7 +5,7 @@ import { FileSpreadsheet, Loader2, Printer, X } from "lucide-react"
 import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { exportAttendanceExcel } from "../services/excel"
-import { addDays, formatDuration, formatTime, minutesToHours, todayKey } from "../services/date"
+import { addDays, formatDuration, formatTime, todayKey } from "../services/date"
 import { AttendanceRecord, CompanySettings, Employee, Language } from "../types"
 import { FeedbackBanner } from "./FeedbackBanner"
 
@@ -184,7 +184,7 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
           </div>
           <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.55)] p-4 text-center">
             <span className="mb-1 block text-xs text-slate-400">{t("attendance.netHours")}</span>
-            <span className="font-mono text-2xl font-bold text-emerald-400">{minutesToHours(totalMinutes)}</span>
+            <span className="font-mono text-xl font-bold text-emerald-400">{formatDuration(totalMinutes, t("common.hours"), t("common.minutes"))}</span>
           </div>
           <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.55)] p-4 text-center">
             <span className="mb-1 block text-xs text-slate-400">{t("attendance.breakMinutes")}</span>

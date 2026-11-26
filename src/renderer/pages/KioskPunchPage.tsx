@@ -16,7 +16,7 @@ import { FeedbackBanner, FeedbackTone } from "../components/FeedbackBanner"
 import { useAppStore } from "../store/useAppStore"
 import { AttendanceRecord, Language, PublicEmployee } from "../types"
 import { errorKey } from "../services/errors"
-import { formatDuration, formatTime, minutesToHours } from "../services/date"
+import { formatDuration, formatTime } from "../services/date"
 
 interface KioskPunchPageProps {
   onOpenAdmin: () => void
@@ -137,7 +137,7 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
       const updated = await punchOut(selected.id)
       setFeedback({
         tone: "success",
-        message: t("kiosk.punchOutSuccess", { hours: minutesToHours(updated.netMinutes) })
+        message: t("kiosk.punchOutSuccess", { hours: formatDuration(updated.netMinutes, t("common.hours"), t("common.minutes")) })
       })
     })
 

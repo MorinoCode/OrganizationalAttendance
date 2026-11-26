@@ -1,6 +1,6 @@
 {
   "name": "hozor-ghiab",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Local attendance and payroll desktop system for Windows (Kuwait edition)",
   "repository": {
     "type": "git",
@@ -88,7 +88,8 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "shortcutName": "نظام الحضور والرواتب"
+      "shortcutName": "نظام الحضور والرواتب",
+      "differentialPackage": false
     },
     "publish": {
       "provider": "github",

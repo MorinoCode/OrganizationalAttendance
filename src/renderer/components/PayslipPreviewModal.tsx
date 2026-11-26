@@ -1,7 +1,7 @@
 import React, { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { CheckCircle2, Download, MessageCircle, Printer, ShieldCheck, X } from "lucide-react"
-import { formatDate, formatDateTime, minutesToHours } from "../services/date"
+import { formatDate, formatDateTime, formatDuration } from "../services/date"
 import { formatMoney } from "../services/money"
 import { CompanySettings, Employee, Language, Payslip } from "../types"
 
@@ -172,7 +172,7 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
                   <tr>
                     <td className="p-2.5 font-semibold">{t("payroll.baseAmount")}</td>
                     <td className="p-2.5 text-center font-mono text-[0.7rem]">
-                      {payslip.workedDays} {t("payroll.workedDays")} · {minutesToHours(payslip.workedMinutes)} {t("common.hours")}
+                      {payslip.workedDays} {t("payroll.workedDays")} · {formatDuration(payslip.workedMinutes, t("common.hours"), t("common.minutes"))}
                     </td>
                     <td className="p-2.5 text-end font-mono font-bold text-slate-900">
                       {money(payslip.baseSalaryMinor)}
@@ -182,7 +182,7 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
                     <tr>
                       <td className="p-2.5">{t("payroll.overtime")}</td>
                       <td className="p-2.5 text-center font-mono text-[0.7rem]">
-                        {minutesToHours(payslip.overtimeMinutes)} {t("common.hours")}
+                        {formatDuration(payslip.overtimeMinutes, t("common.hours"), t("common.minutes"))}
                       </td>
                       <td className="p-2.5 text-end font-mono font-bold text-emerald-700">
                         +{money(payslip.overtimeAmountMinor)}

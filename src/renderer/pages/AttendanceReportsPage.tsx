@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Edit3, FileSpreadsheet, Loader2, Printer, Tr
 import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { exportAttendanceExcel } from "../services/excel"
-import { addDays, DatePreset, formatDuration, formatTime, getPresetDateRange, minutesToHours, todayKey } from "../services/date"
+import { addDays, DatePreset, formatDuration, formatTime, getPresetDateRange, todayKey } from "../services/date"
 import { AttendanceRecord, AttendanceSummary, CompanySettings, Employee, ExportProgress, Language } from "../types"
 import { AttendanceCorrectionModal } from "../components/AttendanceCorrectionModal"
 import { ConfirmDialog } from "../components/ConfirmDialog"
@@ -191,7 +191,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
             <p className="mt-1 text-xs text-slate-400">
               {t("attendance.summaryLine", {
                 days: workedDays,
-                hours: minutesToHours(totalMinutes),
+                hours: formatDuration(totalMinutes, t("common.hours"), t("common.minutes")),
                 breaks: totalBreaks
               })}
             </p>
@@ -342,7 +342,7 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
           <span className="rounded-lg bg-slate-800 px-3 py-1 font-mono text-xs font-bold text-blue-300">
             {t("attendance.summaryLine", {
               days: workedDays,
-              hours: minutesToHours(totalMinutes),
+              hours: formatDuration(totalMinutes, t("common.hours"), t("common.minutes")),
               breaks: totalBreaks
             })}
           </span>

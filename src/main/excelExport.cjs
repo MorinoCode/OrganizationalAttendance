@@ -19,6 +19,18 @@ function minutesToHours(minutes) {
   return Math.round(((Number(minutes) || 0) / 60) * 100) / 100
 }
 
+function formatDuration(minutes, hourUnit, minuteUnit) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0))
+  const hours = Math.floor(total / 60)
+  const rest = total % 60
+  const hUnit = hourUnit || "h"
+  const mUnit = minuteUnit || "m"
+  if (hours === 0 && rest === 0) return `0 ${mUnit}`
+  if (hours === 0) return `${rest} ${mUnit}`
+  if (rest === 0) return `${hours} ${hUnit}`
+  return `${hours} ${hUnit} ${rest} ${mUnit}`
+}
+
 function decimalsOf(decimals) {
   const value = Math.round(Number(decimals))
   if (!Number.isFinite(value)) return 3
@@ -109,7 +121,9 @@ function sanitizeSpec(spec) {
     currency: String(spec.currency ?? ""),
     decimals: decimalsOf(spec.decimals),
     totalLabel: String(spec.totalLabel ?? "Total"),
-    showEmployee: spec.showEmployee !== false
+    showEmployee: spec.showEmployee !== false,
+    hourUnit: String(spec.hourUnit ?? (spec.locale?.startsWith("ar") ? "ساعة" : spec.locale?.startsWith("fa") ? "ساعت" : "h")),
+    minuteUnit: String(spec.minuteUnit ?? (spec.locale?.startsWith("ar") ? "دقيقة" : spec.locale?.startsWith("fa") ? "دقیقه" : "m"))
   }
 }
 
@@ -266,7 +280,7 @@ function exportAttendance({ filter = {}, spec, targetPath, onProgress, shouldCan
         formatTime(record.punchInAt),
         formatTime(record.punchOutAt),
         record.breakMinutes,
-        minutesToHours(record.netMinutes),
+        formatDuration(record.netMinutes, sheetSpec.hourUnit, sheetSpec.minuteUnit),
         sheetSpec.statusLabels[record.status] ?? record.status,
         record.notes || ""
       ]
@@ -281,7 +295,7 @@ function exportAttendance({ filter = {}, spec, targetPath, onProgress, shouldCan
         "",
         "",
         state.breakMinutes ?? 0,
-        minutesToHours(state.netMinutes ?? 0),
+        formatDuration(state.netMinutes ?? 0, sheetSpec.hourUnit, sheetSpec.minuteUnit),
         "",
         ""
       ].slice(0, blankColumns + 5)
@@ -312,8 +326,8 @@ function exportPayslips({ filter = {}, spec, targetPath, onProgress, shouldCance
         payslip.department,
         `${payslip.periodStart} → ${payslip.periodEnd}`,
         payslip.workedDays,
-        minutesToHours(payslip.workedMinutes),
-        minutesToHours(payslip.overtimeMinutes),
+        formatDuration(payslip.workedMinutes, sheetSpec.hourUnit, sheetSpec.minuteUnit),
+        formatDuration(payslip.overtimeMinutes, sheetSpec.hourUnit, sheetSpec.minuteUnit),
         toExcelNumber(payslip.baseSalaryMinor, sheetSpec.decimals),
         toExcelNumber(payslip.overtimeAmountMinor, sheetSpec.decimals),
         toExcelNumber(payslip.bonusesMinor, sheetSpec.decimals),
