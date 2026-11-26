@@ -1,6 +1,7 @@
 import React, { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircle, Building2, Globe, ShieldCheck, UploadCloud } from "lucide-react"
+import { AlertCircle, Globe, ShieldCheck, UploadCloud } from "lucide-react"
+import { BrandLogo } from "./BrandLogo"
 import { useAppStore } from "../store/useAppStore"
 import { errorKey } from "../services/errors"
 import { setAppLanguage } from "../i18n/config"
@@ -91,9 +92,7 @@ export const FirstTimeSetupModal: React.FC<FirstTimeSetupModalProps> = ({ isOpen
         {/* brand rail */}
         <aside className="relative hidden flex-col justify-between border-e border-[color:var(--line)] bg-[linear-gradient(165deg,rgba(214,171,91,0.16),rgba(214,171,91,0.02)_45%,rgba(11,10,8,0.9))] p-7 md:flex">
           <div>
-            <span className="grid h-12 w-12 place-items-center rounded-xl border border-[rgba(214,171,91,0.4)] bg-[rgba(11,10,8,0.55)] text-[#e6c98a]">
-              <Building2 className="h-5 w-5" aria-hidden />
-            </span>
+            <BrandLogo className="h-12 w-12 shrink-0 drop-shadow-[0_2px_8px_rgba(214,171,91,0.25)]" size={48} />
             <h1 className="mt-6 text-lg font-semibold leading-snug tracking-tight text-[#f8efd8]">
               {t("appTitle")}
             </h1>

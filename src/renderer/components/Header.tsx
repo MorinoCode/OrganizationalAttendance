@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Building2, Calendar, Clock, Globe, LogIn, LogOut, ShieldCheck } from "lucide-react"
+import { Calendar, Clock, Globe, LogIn, LogOut, ShieldCheck } from "lucide-react"
+
+import { BrandLogo } from "./BrandLogo"
 
 import { setAppLanguage } from "../i18n/config"
 import { CompanySettings, Language } from "../types"
@@ -63,10 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => onNavigate("kiosk")}
           className="group flex items-center gap-3.5 rounded-xl text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brass)]/50"
         >
-          <span className="relative grid h-11 w-11 place-items-center rounded-xl border border-[rgba(214,171,91,0.4)] bg-[linear-gradient(150deg,rgba(214,171,91,0.22),rgba(214,171,91,0.02))] shadow-[inset_0_1px_0_rgba(255,246,230,0.18)]">
-            <Building2 className="h-[1.15rem] w-[1.15rem] text-[#e6c98a]" aria-hidden />
-            <span className="absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0b0a08] bg-[#46c39f]" />
-          </span>
+          <BrandLogo className="h-11 w-11 shrink-0 drop-shadow-[0_2px_8px_rgba(214,171,91,0.25)] transition-transform duration-200 group-hover:scale-105" size={44} />
           <span className="min-w-0">
             <span className="block truncate text-[0.98rem] font-semibold tracking-tight text-[#f4ece0] transition-colors group-hover:text-[#e6c98a]">
               {settings.companyName || t("appTitle")}
