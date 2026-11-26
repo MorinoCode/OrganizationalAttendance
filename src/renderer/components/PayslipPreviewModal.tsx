@@ -1,6 +1,6 @@
 import React, { useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckCircle2, Download, MessageCircle, Printer, ShieldCheck, X } from "lucide-react"
+import { CheckCircle2, Download, MessageCircle, Printer, X } from "lucide-react"
 import { formatDate, formatDateTime, formatDuration } from "../services/date"
 import { formatMoney } from "../services/money"
 import { CompanySettings, Employee, Language, Payslip } from "../types"
@@ -260,24 +260,13 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
             </div>
 
             <div className="relative mt-6 grid grid-cols-2 gap-6 border-t-2 border-slate-300 pt-6">
-              <div className="relative flex h-32 flex-col justify-between rounded-xl border border-dashed border-slate-400 p-3 text-center">
+              <div className="flex h-32 flex-col justify-between rounded-xl border border-dashed border-slate-400 p-3 text-center">
                 <span className="text-[0.72rem] font-bold text-slate-700">{t("payroll.employerSignature")}</span>
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="flex h-24 w-24 -rotate-12 flex-col items-center justify-center rounded-full border-2 border-double border-blue-700/80 p-1 text-center text-blue-800/90 shadow-sm">
-                    <ShieldCheck className="h-4 w-4 text-blue-700" />
-                    <span className="text-[0.55rem] font-black uppercase tracking-widest">{settings.companyName}</span>
-                    <span className="text-[0.5rem] font-bold">{t("payroll.preview.officialStamp")}</span>
-                  </div>
-                </div>
-                <span className="border-b border-slate-400 pb-1 text-[0.68rem] text-slate-600">
-                  {settings.ownerName}
-                </span>
+                <span className="border-b border-slate-400 pb-1" />
               </div>
               <div className="flex h-32 flex-col justify-between rounded-xl border border-dashed border-slate-400 p-3 text-center">
                 <span className="text-[0.72rem] font-bold text-slate-700">{t("payroll.employeeSignature")}</span>
-                <span className="border-b border-slate-400 pb-1 text-[0.68rem] text-slate-600">
-                  {payslip.employeeName}
-                </span>
+                <span className="border-b border-slate-400 pb-1" />
               </div>
             </div>
           </div>

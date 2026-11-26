@@ -829,15 +829,11 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
               <div className="grid grid-cols-2 gap-8 border-t-2 border-slate-300 pt-8">
                 <div className="flex h-36 flex-col justify-between rounded-2xl border border-dashed border-slate-400 p-4 text-center">
                   <span className="text-xs font-bold text-slate-700">{t("payroll.employerSignature")}</span>
-                  <span className="border-b border-slate-400 pb-1 text-xs text-slate-400">
-                    {settings.ownerName}
-                  </span>
+                  <span className="border-b border-slate-400 pb-1" />
                 </div>
                 <div className="flex h-36 flex-col justify-between rounded-2xl border border-dashed border-slate-400 p-4 text-center">
                   <span className="text-xs font-bold text-slate-700">{t("payroll.employeeSignature")}</span>
-                  <span className="border-b border-slate-400 pb-1 text-xs text-slate-400">
-                    {selectedPayslip.employeeName}
-                  </span>
+                  <span className="border-b border-slate-400 pb-1" />
                 </div>
               </div>
             </div>
