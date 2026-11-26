@@ -89,6 +89,13 @@
       "noData": "هنوز اطلاعاتی برای نمایش ثبت نشده است."
     }
   },
+  "stats": {
+    "totalEmployees": "کل کارمندان",
+    "activeToday": "حاضر امروز",
+    "onBreakNow": "در استراحت",
+    "completedToday": "پایان شیفت",
+    "totalHoursWorked": "ساعات کار امروز"
+  },
   "employees": {
     "addEmployee": "افزودن کارمند",
     "editEmployee": "ویرایش کارمند",

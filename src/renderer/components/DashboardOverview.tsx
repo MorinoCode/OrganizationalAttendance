@@ -7,10 +7,12 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  Coffee,
   Gauge,
   MessageCircle,
   Timer,
   TrendingUp,
+  Users,
   UserX
 } from "lucide-react"
 
@@ -154,6 +156,53 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const absencePercent = absence ? Math.round(absence.rate * 1000) / 10 : 0
   const hasPayrollData = (insights?.departmentCosts.length ?? 0) > 0
 
+  const statCells = useMemo(() => {
+    const totalEmployees = employees.filter(employee => employee.isActive).length
+    const working = todayRecords.filter(record => record.status === "present").length
+    const onBreak = todayRecords.filter(record => record.status === "on_break").length
+    const completed = todayRecords.filter(record => record.status === "completed").length
+    const totalMinutes = todayRecords.reduce((total, record) => total + record.netMinutes, 0)
+    const formattedHours = formatDuration(totalMinutes, t("common.hours"), t("common.minutes"))
+
+    return [
+      {
+        label: t("stats.totalEmployees"),
+        value: totalEmployees,
+        tone: "text-[#f4ece0]",
+        icon: <Users className="h-3.5 w-3.5" aria-hidden />,
+        accent: "text-[#c0b4a3]"
+      },
+      {
+        label: t("stats.activeToday"),
+        value: working,
+        tone: "text-[#78dcbc]",
+        icon: <Clock className="h-3.5 w-3.5" aria-hidden />,
+        accent: "text-[#46c39f]"
+      },
+      {
+        label: t("stats.onBreakNow"),
+        value: onBreak,
+        tone: "text-[#e6b276]",
+        icon: <Coffee className="h-3.5 w-3.5" aria-hidden />,
+        accent: "text-[#d8954e]"
+      },
+      {
+        label: t("stats.completedToday"),
+        value: completed,
+        tone: "text-[#e6c98a]",
+        icon: <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />,
+        accent: "text-[#d6ab5b]"
+      },
+      {
+        label: t("stats.totalHoursWorked"),
+        value: formattedHours,
+        tone: "text-[#c2a3d8]",
+        icon: <Gauge className="h-3.5 w-3.5" aria-hidden />,
+        accent: "text-[#a883c2]"
+      }
+    ]
+  }, [employees, todayRecords, t])
+
   const sendWhatsAppPrompt = (employee: Employee) => {
     if (!employee.phone) return
     const phone = cleanPhoneNumber(employee.phone)
@@ -175,6 +224,24 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <span>{error}</span>
         </div>
       )}
+
+      <div className="panel overflow-hidden no-print">
+        <div className="grid grid-cols-2 gap-px bg-[rgba(214,186,140,0.1)] sm:grid-cols-3 lg:grid-cols-5">
+          {statCells.map(cell => (
+            <div key={cell.label} className="group bg-[rgba(20,17,13,0.94)] px-5 py-4 transition-colors hover:bg-[rgba(28,24,18,0.94)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-[#8d8275]">
+                  {cell.label}
+                </span>
+                <span className={cell.accent}>{cell.icon}</span>
+              </div>
+              <span className={`mt-2 block font-mono text-[1.25rem] sm:text-[1.4rem] font-semibold leading-none ${cell.tone}`}>
+                {cell.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="panel space-y-4 p-5">

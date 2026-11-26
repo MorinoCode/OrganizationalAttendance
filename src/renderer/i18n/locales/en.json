@@ -89,6 +89,13 @@
       "noData": "No data recorded to display yet."
     }
   },
+  "stats": {
+    "totalEmployees": "Total employees",
+    "activeToday": "Present today",
+    "onBreakNow": "On break now",
+    "completedToday": "Finished today",
+    "totalHoursWorked": "Worked hours today"
+  },
   "employees": {
     "addEmployee": "Add employee",
     "editEmployee": "Edit employee",
