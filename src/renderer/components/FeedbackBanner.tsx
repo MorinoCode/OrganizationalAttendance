@@ -1,4 +1,5 @@
 import React, { useEffect } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react"
 
@@ -72,10 +73,10 @@ export const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ tone, message, o
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [onClose])
 
-  return (
+  const popup = (
     <div
       role="status"
-      className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-[94vw] max-w-xl pointer-events-auto transition-all duration-300 animate-in fade-in slide-in-from-top-4"
+      className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] w-[94vw] max-w-xl pointer-events-auto transition-all duration-300 animate-in fade-in slide-in-from-top-4"
     >
       <div className={`relative overflow-hidden rounded-2xl border backdrop-blur-xl p-4 sm:p-4.5 ${styles.wrapper}`}>
         <div className={`absolute top-0 inset-x-0 h-[2px] ${styles.line}`} />
@@ -114,6 +115,11 @@ export const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ tone, message, o
       </div>
     </div>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(popup, document.body)
+  }
+  return popup
 }
 
 export const FeedbackPopup = FeedbackBanner

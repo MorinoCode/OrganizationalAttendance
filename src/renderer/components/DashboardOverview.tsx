@@ -22,6 +22,7 @@ import { addDays, formatDate, formatDuration, minutesToHours, monthStartKey, tod
 import { formatMoney } from "../services/money"
 import { AttendanceRecord, CompanySettings, DashboardInsights, Employee, Language } from "../types"
 import { cleanPhoneNumber } from "../utils/whatsapp"
+import { FeedbackBanner } from "./FeedbackBanner"
 
 interface DashboardOverviewProps {
   settings: CompanySettings
@@ -219,10 +220,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   return (
     <div className="space-y-6">
       {error && (
-        <div className="panel flex items-center gap-3 border-[rgba(200,95,78,0.4)] bg-[rgba(200,95,78,0.1)] p-4 text-xs text-[#e9a094]">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <FeedbackBanner tone="error" message={error} onClose={() => setError(null)} />
       )}
 
       <div className="panel overflow-hidden no-print">
