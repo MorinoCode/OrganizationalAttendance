@@ -14,7 +14,7 @@ const backupScheduler = require("./backupScheduler.cjs")
 const { toErrorPayload } = require("./lib/errors.cjs")
 
 const isDev = !app.isPackaged
-const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173"
+const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173"
 const RENDERER_ENTRY = path.join(__dirname, "..", "..", "dist", "index.html")
 
 let mainWindow = null
@@ -84,6 +84,7 @@ function createWindow() {
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!gotSingleInstanceLock) {
+  console.warn("[app] Another instance is already running. Please close the active instance first.")
   app.quit()
 } else {
   app.on("second-instance", () => {

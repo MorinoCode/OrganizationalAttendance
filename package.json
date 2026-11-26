@@ -1,6 +1,6 @@
 {
   "name": "hozor-ghiab",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "Local attendance and payroll desktop system for Windows (Kuwait edition)",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "electron": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
