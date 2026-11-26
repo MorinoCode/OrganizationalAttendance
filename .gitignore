@@ -12,3 +12,5 @@ scratch/
 *.db-shm
 .vdata/
 .vrun/
+.smoke-data/
+.smoke-tmp/

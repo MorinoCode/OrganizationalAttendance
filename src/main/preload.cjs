@@ -44,7 +44,8 @@ contextBridge.exposeInMainWorld("api", {
     remove: (data, token) => invoke("attendance:delete", data, token)
   },
   reports: {
-    monthClose: (data, token) => invoke("reports:month-close", data, token)
+    monthClose: (data, token) => invoke("reports:month-close", data, token),
+    dashboardInsights: (data, token) => invoke("dashboard:insights", data, token)
   },
   leaves: {
     list: (data, token) => invoke("leaves:list", data, token),
@@ -85,9 +86,14 @@ contextBridge.exposeInMainWorld("api", {
     }
   },
   updater: {
-    check: () => invoke("updater:check"),
-    download: () => invoke("updater:download"),
-    install: () => invoke("updater:install"),
-    status: () => invoke("updater:status")
+    check: token => invoke("updater:check", {}, token),
+    download: token => invoke("updater:download", {}, token),
+    install: token => invoke("updater:install", {}, token),
+    status: token => invoke("updater:status", {}, token),
+    onEvent: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on("updater:event", listener)
+      return () => ipcRenderer.removeListener("updater:event", listener)
+    }
   }
 })

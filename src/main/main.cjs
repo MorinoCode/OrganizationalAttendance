@@ -6,6 +6,7 @@ const { app, BrowserWindow, dialog, session, shell } = require("electron")
 
 const { initDatabase, closeDatabase, getDatabasePath } = require("./db/index.cjs")
 const { registerIpcHandlers, cancelActiveExports, discardActiveExports } = require("./ipc.cjs")
+const exportJournal = require("./exportJournal.cjs")
 const { initUpdater } = require("./updater.cjs")
 const backupScheduler = require("./backupScheduler.cjs")
 const { toErrorPayload } = require("./lib/errors.cjs")
@@ -109,6 +110,12 @@ if (!gotSingleInstanceLock) {
     }
 
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+
+    try {
+      exportJournal.sweep(app.getPath("userData"))
+    } catch (error) {
+      console.error("[export] startup sweep failed:", error?.message ?? error)
+    }
 
     registerIpcHandlers({ getMainWindow: () => mainWindow })
     initUpdater(() => mainWindow)

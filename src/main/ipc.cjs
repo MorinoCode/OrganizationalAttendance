@@ -11,6 +11,7 @@ const auth = require("./lib/auth.cjs")
 const backup = require("./backup.cjs")
 const backupScheduler = require("./backupScheduler.cjs")
 const excelExport = require("./excelExport.cjs")
+const exportJournal = require("./exportJournal.cjs")
 const updater = require("./updater.cjs")
 const time = require("./lib/time.cjs")
 const { AppError, appError, toErrorPayload } = require("./lib/errors.cjs")
@@ -22,6 +23,7 @@ const LOGIN_WINDOW_MS = 60 * 1000
 let loginFailures = []
 
 const activeExports = new Map()
+let activeExportJournalDir = null
 const EXPORT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
 
 function cancelActiveExports() {
@@ -29,6 +31,7 @@ function cancelActiveExports() {
 }
 
 function discardActiveExports() {
+  const journalDir = activeExportJournalDir
   for (const session of activeExports.values()) {
     session.canceled = true
     if (!session.tempPath) continue
@@ -36,6 +39,7 @@ function discardActiveExports() {
       fs.rmSync(session.tempPath, { force: true })
     } catch {
     }
+    exportJournal.untrack(journalDir, session.tempPath)
   }
   activeExports.clear()
 }
@@ -227,6 +231,7 @@ function registerIpcHandlers({ getMainWindow }) {
   handle("attendance:mark-absences", data => repositories.markAbsences(data ?? {}, "admin"), { requiresAuth: true })
   handle("attendance:clear-absences", data => repositories.clearAbsences(data ?? {}, "admin"), { requiresAuth: true })
   handle("reports:month-close", data => repositories.monthCloseReport(data ?? {}), { requiresAuth: true })
+  handle("dashboard:insights", data => repositories.dashboardInsights(data ?? {}), { requiresAuth: true })
   handle("attendance:correct", ({ id, patch } = {}) => repositories.correctAttendance(id, patch ?? {}, "admin"), { requiresAuth: true })
   handle("attendance:delete", ({ id } = {}) => repositories.deleteAttendance(id, "admin"), { requiresAuth: true })
 
@@ -350,8 +355,11 @@ function registerIpcHandlers({ getMainWindow }) {
     if (canceled || !filePath) return { canceled: true }
     const targetPath = filePath
 
+    const journalDir = app.getPath("userData")
+    activeExportJournalDir = journalDir
     const session = { canceled: false, tempPath: `${targetPath}.part` }
     activeExports.set(exportId, session)
+    exportJournal.track(journalDir, session.tempPath)
 
     const onProgress = progress => {
       if (win.isDestroyed()) return
@@ -371,6 +379,7 @@ function registerIpcHandlers({ getMainWindow }) {
       throw error
     } finally {
       activeExports.delete(exportId)
+      exportJournal.untrack(journalDir, session.tempPath)
     }
   }
 
@@ -404,10 +413,10 @@ function registerIpcHandlers({ getMainWindow }) {
     return { canceled: false, filePath }
   }, { requiresAuth: true })
 
-  handle("updater:check", () => updater.checkForUpdates())
-  handle("updater:download", () => updater.downloadUpdate())
-  handle("updater:install", () => updater.installUpdate())
-  handle("updater:status", () => updater.getStatus())
+  handle("updater:check", () => updater.checkForUpdates(), { requiresAuth: true })
+  handle("updater:download", () => updater.downloadUpdate(), { requiresAuth: true })
+  handle("updater:install", () => updater.installUpdate(), { requiresAuth: true })
+  handle("updater:status", () => updater.getStatus(), { requiresAuth: true })
 }
 
 module.exports = { registerIpcHandlers, cancelActiveExports, discardActiveExports, MIN_PASSWORD_LENGTH }

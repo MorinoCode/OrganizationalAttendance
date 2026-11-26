@@ -1,169 +1,242 @@
 "use strict"
 
-const { app } = require("electron")
+const DEFAULT_INITIAL_DELAY_MS = 20 * 1000
+const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-let autoUpdater = null
-
-function getAutoUpdater() {
-  if (!autoUpdater) {
-    try {
-      const updaterModule = require("electron-updater")
-      autoUpdater = updaterModule.autoUpdater
-      autoUpdater.autoDownload = false
-      autoUpdater.autoInstallOnAppQuit = true
-    } catch {
-      autoUpdater = null
-    }
-  }
-  return autoUpdater
-}
-
-let updaterState = {
-  status: "idle",
-  version: null,
-  percent: 0,
-  error: null
-}
-
-function notifyRenderer(getMainWindow) {
+function normalizeFeedUrl(value) {
+  const raw = typeof value === "string" ? value.trim() : ""
+  if (!raw) return null
   try {
-    const win = getMainWindow ? getMainWindow() : null
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("updater:event", getStatus())
-    }
+    const url = new URL(raw)
+    const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1"
+    if (url.protocol !== "https:" && !(isLocal && url.protocol === "http:")) return null
+    return url.toString().endsWith("/") ? url.toString() : `${url.toString()}/`
   } catch {
+    return null
   }
+}
+
+function createUpdaterService({
+  app,
+  loadAutoUpdater,
+  getMainWindow = () => null,
+  feedUrl = null,
+  initialDelayMs = DEFAULT_INITIAL_DELAY_MS,
+  checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
+  logger = console
+}) {
+  let updater = null
+  let listenersBound = false
+  let initialized = false
+  let checkInFlight = false
+  let checkTimer = null
+  let intervalTimer = null
+  let state = { status: "idle", version: null, percent: 0, error: null, lastCheckedAt: null }
+
+  function snapshot() {
+    return {
+      ...state,
+      currentVersion: app.getVersion(),
+      isPackaged: Boolean(app.isPackaged),
+      feedConfigured: Boolean(feedUrl)
+    }
+  }
+
+  function notifyRenderer() {
+    try {
+      const win = getMainWindow()
+      if (win && !win.isDestroyed()) win.webContents.send("updater:event", snapshot())
+    } catch {
+    }
+  }
+
+  function setState(patch) {
+    state = { ...state, ...patch }
+    notifyRenderer()
+    return snapshot()
+  }
+
+  function resolveUpdater() {
+    if (updater) return updater
+    let module = null
+    try {
+      module = loadAutoUpdater()
+    } catch (error) {
+      logger.error("[updater] electron-updater is not available:", error?.message ?? error)
+      return null
+    }
+    updater = module && module.autoUpdater ? module.autoUpdater : null
+    if (!updater) return null
+    updater.autoDownload = false
+    updater.autoInstallOnAppQuit = true
+    updater.allowPrerelease = false
+    updater.logger = logger
+    if (feedUrl && typeof updater.setFeedURL === "function") {
+      updater.setFeedURL({ provider: "generic", url: feedUrl })
+    }
+    bindEvents(updater)
+    return updater
+  }
+
+  function bindEvents(instance) {
+    if (listenersBound) return
+    listenersBound = true
+
+    instance.on("checking-for-update", () => {
+      setState({ status: "checking", version: null, percent: 0, error: null })
+    })
+    instance.on("update-available", info => {
+      logger.info(`[updater] update available: ${info?.version ?? "unknown"}`)
+      setState({ status: "available", version: info?.version ?? null, percent: 0, error: null })
+    })
+    instance.on("update-not-available", () => {
+      setState({ status: "not-available", version: null, percent: 0, error: null, lastCheckedAt: new Date().toISOString() })
+    })
+    instance.on("download-progress", progress => {
+      setState({ status: "downloading", percent: Math.round(Number(progress?.percent) || 0) })
+    })
+    instance.on("update-downloaded", info => {
+      setState({ status: "downloaded", version: info?.version ?? state.version, percent: 100, error: null })
+    })
+    instance.on("error", error => {
+      logger.error("[updater] update error:", error?.message ?? error)
+      setState({ status: "error", percent: 0, error: error?.message ? String(error.message) : "update_failed" })
+    })
+  }
+
+  async function runCheck() {
+    if (checkInFlight) return snapshot()
+    const instance = resolveUpdater()
+    if (!instance) return setState({ status: "error", error: "updater_unavailable" })
+
+    checkInFlight = true
+    setState({ status: "checking", version: null, percent: 0, error: null })
+    try {
+      const result = await instance.checkForUpdates()
+      const version = result && result.updateInfo ? result.updateInfo.version : state.version
+      setState({ version: version ?? state.version, lastCheckedAt: new Date().toISOString() })
+      return snapshot()
+    } catch (error) {
+      logger.error("[updater] check failed:", error?.message ?? error)
+      return setState({ status: "error", percent: 0, error: error?.message ? String(error.message) : "check_failed" })
+    } finally {
+      checkInFlight = false
+    }
+  }
+
+  async function checkForUpdates() {
+    if (!app.isPackaged) {
+      return { status: "development", currentVersion: app.getVersion(), version: null, percent: 0, error: null, feedConfigured: Boolean(feedUrl) }
+    }
+    if (!feedUrl) {
+      return { status: "not-configured", currentVersion: app.getVersion(), version: null, percent: 0, error: null, feedConfigured: false }
+    }
+    return runCheck()
+  }
+
+  function initUpdater() {
+    if (initialized) return
+    if (!app.isPackaged) {
+      logger.info("[updater] automatic updates are disabled in development")
+      return
+    }
+    if (!feedUrl) {
+      logger.warn("[updater] HOZOR_UPDATE_URL is not set; automatic update checks are disabled")
+      state = { ...state, status: "not-configured" }
+      return
+    }
+    initialized = true
+    if (!resolveUpdater()) return
+    logger.info(`[updater] automatic checks enabled against ${feedUrl}`)
+
+    checkTimer = setTimeout(() => {
+      void checkForUpdates()
+      intervalTimer = setInterval(() => {
+        void checkForUpdates()
+      }, checkIntervalMs)
+      if (typeof intervalTimer.unref === "function") intervalTimer.unref()
+    }, initialDelayMs)
+    if (typeof checkTimer.unref === "function") checkTimer.unref()
+  }
+
+  async function downloadUpdate() {
+    if (!app.isPackaged) return { ok: false, reason: "development" }
+    if (!feedUrl) return { ok: false, reason: "not-configured" }
+    const instance = resolveUpdater()
+    if (!instance) return { ok: false, reason: "unavailable" }
+    if (state.status === "downloaded") return { ok: true, alreadyDownloaded: true }
+    if (state.status === "downloading") return { ok: true, alreadyDownloading: true }
+
+    setState({ status: "downloading", percent: 0, error: null })
+    try {
+      await instance.downloadUpdate()
+      return { ok: true }
+    } catch (error) {
+      logger.error("[updater] download failed:", error?.message ?? error)
+      setState({ status: "error", percent: 0, error: error?.message ? String(error.message) : "download_failed" })
+      return { ok: false, error: error?.message ? String(error.message) : "download_failed" }
+    }
+  }
+
+  function installUpdate() {
+    if (!app.isPackaged) return { ok: false, reason: "development" }
+    if (!feedUrl) return { ok: false, reason: "not-configured" }
+    if (state.status !== "downloaded") return { ok: false, reason: "not-downloaded" }
+    const instance = resolveUpdater()
+    if (!instance) return { ok: false, reason: "unavailable" }
+    logger.info(`[updater] installing version ${state.version ?? "unknown"}`)
+    instance.quitAndInstall()
+    return { ok: true }
+  }
+
+  function dispose() {
+    if (checkTimer) clearTimeout(checkTimer)
+    if (intervalTimer) clearInterval(intervalTimer)
+    checkTimer = null
+    intervalTimer = null
+  }
+
+  return {
+    initUpdater,
+    checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+          getStatus: () => (app.isPackaged ? snapshot() : { ...snapshot(), status: state.status === "idle" ? "development" : state.status }),
+      dispose
+  }
+}
+
+let windowGetter = () => null
+let service = null
+
+function resolveDefaultFeedUrl(env = process.env) {
+  return normalizeFeedUrl(env.HOZOR_UPDATE_URL)
+}
+
+function getService() {
+  if (!service) {
+    const { app } = require("electron")
+    service = createUpdaterService({
+      app,
+      loadAutoUpdater: () => require("electron-updater"),
+      getMainWindow: () => windowGetter(),
+      feedUrl: resolveDefaultFeedUrl()
+    })
+  }
+  return service
 }
 
 function initUpdater(getMainWindow) {
-  if (!app.isPackaged) return
-  const updater = getAutoUpdater()
-  if (!updater) return
-
-  updater.on("checking-for-update", () => {
-    updaterState = { status: "checking", version: null, percent: 0, error: null }
-    notifyRenderer(getMainWindow)
-  })
-
-  updater.on("update-available", info => {
-    updaterState = { status: "available", version: info.version, percent: 0, error: null }
-    notifyRenderer(getMainWindow)
-  })
-
-  updater.on("update-not-available", () => {
-    updaterState = { status: "not-available", version: null, percent: 0, error: null }
-    notifyRenderer(getMainWindow)
-  })
-
-  updater.on("download-progress", progress => {
-    updaterState = {
-      status: "downloading",
-      version: updaterState.version,
-      percent: Math.round(progress.percent || 0),
-      error: null
-    }
-    notifyRenderer(getMainWindow)
-  })
-
-  updater.on("update-downloaded", info => {
-    updaterState = {
-      status: "downloaded",
-      version: info.version,
-      percent: 100,
-      error: null
-    }
-    notifyRenderer(getMainWindow)
-  })
-
-  updater.on("error", err => {
-    updaterState = {
-      status: "error",
-      version: null,
-      percent: 0,
-      error: err ? err.message : "Update failed"
-    }
-    notifyRenderer(getMainWindow)
-  })
-}
-
-async function checkForUpdates() {
-  if (!app.isPackaged) {
-    return {
-      status: "development",
-      currentVersion: app.getVersion(),
-      version: null,
-      percent: 0,
-      error: null
-    }
-  }
-  const updater = getAutoUpdater()
-  if (!updater) {
-    return {
-      status: "error",
-      currentVersion: app.getVersion(),
-      version: null,
-      percent: 0,
-      error: "updater_unavailable"
-    }
-  }
-  try {
-    const result = await updater.checkForUpdates()
-    return {
-      status: updaterState.status,
-      version: result && result.updateInfo ? result.updateInfo.version : null,
-      currentVersion: app.getVersion(),
-      percent: 0,
-      error: null
-    }
-  } catch (err) {
-    updaterState = {
-      status: "error",
-      version: null,
-      percent: 0,
-      error: err ? err.message : "check_failed"
-    }
-    return {
-      status: "error",
-      error: err ? err.message : "check_failed",
-      currentVersion: app.getVersion(),
-      version: null,
-      percent: 0
-    }
-  }
-}
-
-async function downloadUpdate() {
-  if (!app.isPackaged) return { ok: false, reason: "development" }
-  const updater = getAutoUpdater()
-  if (!updater) return { ok: false, reason: "unavailable" }
-  try {
-    await updater.downloadUpdate()
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err ? err.message : "download_failed" }
-  }
-}
-
-function installUpdate() {
-  if (!app.isPackaged) return { ok: false, reason: "development" }
-  const updater = getAutoUpdater()
-  if (!updater) return { ok: false, reason: "unavailable" }
-  updater.quitAndInstall()
-  return { ok: true }
-}
-
-function getStatus() {
-  return {
-    ...updaterState,
-    currentVersion: app.getVersion(),
-    isPackaged: app.isPackaged
-  }
+  windowGetter = typeof getMainWindow === "function" ? getMainWindow : () => null
+  return getService().initUpdater()
 }
 
 module.exports = {
   initUpdater,
-  checkForUpdates,
-  downloadUpdate,
-  installUpdate,
-  getStatus
+  checkForUpdates: () => getService().checkForUpdates(),
+  downloadUpdate: () => getService().downloadUpdate(),
+  installUpdate: () => getService().installUpdate(),
+  getStatus: () => getService().getStatus(),
+  createUpdaterService,
+  normalizeFeedUrl
 }

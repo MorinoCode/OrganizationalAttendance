@@ -18,7 +18,7 @@ import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { LOCALES, formatDateTime, minutesToTime, timeToMinutes } from "../services/date"
 import { useAppStore } from "../store/useAppStore"
-import { AppInfo, AuditLogEntry, BackupEntry, BackupPreview, BackupStatus, CompanySettings, Language } from "../types"
+import { AppInfo, AuditLogEntry, BackupEntry, BackupPreview, BackupStatus, CompanySettings, Language, UpdaterStatus } from "../types"
 import { FeedbackBanner, FeedbackTone } from "../components/FeedbackBanner"
 import { RestorePreviewDialog } from "../components/RestorePreviewDialog"
 import { formatFileSize } from "../services/format"
@@ -79,12 +79,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
   const [busy, setBusy] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ tone: FeedbackTone; message: string } | null>(null)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
-  const [updaterState, setUpdaterState] = useState<{
-    status: string
-    version: string | null
-    percent?: number
-    error?: string | null
-  }>({ status: "idle", version: null, percent: 0, error: null })
+  const [updaterState, setUpdaterState] = useState<UpdaterStatus>({ status: "idle", version: null, percent: 0, error: null })
 
   const handleError = useCallback(
     (caught: unknown) => {
@@ -111,6 +106,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
   useEffect(() => {
     void loadSideData()
   }, [loadSideData])
+
+  useEffect(() => {
+    let active = true
+    const unsubscribe = api.updater.onEvent(status => {
+      if (active) setUpdaterState(status)
+    })
+    void api.updater
+      .status()
+      .then(status => {
+        if (active) setUpdaterState(status)
+      })
+      .catch(() => {
+      })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
 
   const shiftStartValue = timeToMinutes(shiftStart)
   const shiftEndValue = timeToMinutes(shiftEnd)
@@ -181,13 +194,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true)
     try {
-      const res = await api.updater.check()
-      setUpdaterState({
-        status: res.status,
-        version: res.version,
-        percent: res.percent,
-        error: res.error
-      })
+      setUpdaterState(await api.updater.check())
     } catch (caught) {
       setUpdaterState({
         status: "error",
@@ -202,14 +209,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
   const handleDownloadUpdate = async () => {
     setUpdaterState(prev => ({ ...prev, status: "downloading", percent: 0 }))
     try {
-      await api.updater.download()
+      const result = await api.updater.download()
+      if (!result.ok) {
+        setUpdaterState({ status: "error", version: null, percent: 0, error: result.reason ?? result.error ?? "download_failed" })
+        return
+      }
     } catch (caught) {
       setUpdaterState(prev => ({ ...prev, status: "error", error: String(caught) }))
+    } finally {
+      try {
+        setUpdaterState(await api.updater.status())
+      } catch {
+      }
     }
   }
 
-  const handleInstallUpdate = () => {
-    void api.updater.install()
+  const handleInstallUpdate = async () => {
+    try {
+      const result = await api.updater.install()
+      if (!result.ok) setFeedback({ tone: "error", message: t("settings.updater.installFailed") })
+    } catch (caught) {
+      handleError(caught)
+    }
   }
 
   const handleBackup = async () => {
@@ -750,6 +771,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
                 {updaterState.status === "downloaded" && t("settings.updater.ready")}
                 {updaterState.status === "not-available" && t("settings.updater.upToDate")}
                 {updaterState.status === "development" && t("settings.updater.devMode")}
+                {updaterState.status === "not-configured" && t("settings.updater.notConfigured")}
                 {updaterState.status === "error" && (updaterState.error || t("settings.updater.failed"))}
                 {updaterState.status === "idle" && t("settings.updater.idle")}
               </span>
@@ -777,7 +799,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
               {updaterState.status === "downloaded" && (
                 <button
                   type="button"
-                  onClick={handleInstallUpdate}
+                  onClick={() => void handleInstallUpdate()}
                   className="btn btn-primary"
                 >
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden />
@@ -787,7 +809,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
               <button
                 type="button"
                 onClick={() => void handleCheckUpdate()}
-                disabled={checkingUpdate || updaterState.status === "downloading"}
+                disabled={checkingUpdate || updaterState.status === "downloading" || updaterState.status === "not-configured"}
                 className="btn btn-ghost"
               >
                 {checkingUpdate ? (

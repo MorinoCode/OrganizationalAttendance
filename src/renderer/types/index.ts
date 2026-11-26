@@ -283,3 +283,62 @@ export interface AppInfo {
   platform: string
   databasePath: string | null
 }
+
+export interface DepartmentCost {
+  department: string
+  employees: number
+  slips: number
+  netAmountMinor: number
+  overtimeAmountMinor: number
+  overtimeMinutes: number
+  workedMinutes: number
+}
+
+export interface OvertimeTrendPoint {
+  monthKey: string
+  overtimeMinutes: number
+  overtimeAmountMinor: number
+}
+
+export interface AbsenceSummary {
+  expectedDays: number
+  presentDays: number
+  leaveDays: number
+  absentDays: number
+  rate: number
+  activeEmployees: number
+  workDaysPerWeek: number
+  hasData: boolean
+}
+
+export interface DashboardInsights {
+  generatedAt: string
+  range: { fromDate: string; toDate: string; monthStart: string; months: number }
+  departmentCosts: DepartmentCost[]
+  overtimeTrend: OvertimeTrendPoint[]
+  payrollTrend: { monthKey: string; netAmountMinor: number }[]
+  hoursByEmployee: { id: string; name: string; code: string; department: string; minutes: number }[]
+  absence: AbsenceSummary
+}
+
+export type UpdaterStatusValue =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "not-available"
+  | "not-configured"
+  | "development"
+  | "error"
+
+export interface UpdaterStatus {
+  status: UpdaterStatusValue | string
+  version: string | null
+  percent?: number
+  error?: string | null
+  currentVersion?: string
+  isPackaged?: boolean
+  feedConfigured?: boolean
+  lastCheckedAt?: string | null
+}

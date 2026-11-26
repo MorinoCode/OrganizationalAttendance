@@ -143,10 +143,6 @@ export const App: React.FC = () => {
           <AdminDashboard
             settings={settings}
             onBackToKiosk={() => setView("kiosk")}
-            onLogout={() => {
-              void logout()
-              setView("kiosk")
-            }}
             onSessionEnded={message => {
               setView("kiosk")
               setNotice(message)

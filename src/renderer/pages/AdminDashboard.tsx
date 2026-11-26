@@ -10,7 +10,6 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
-  LogOut,
   Settings,
   Users
 } from "lucide-react"
@@ -34,7 +33,6 @@ interface AdminDashboardProps {
   settings: CompanySettings
   onBackToKiosk: () => void
   onSessionEnded: (message: string) => void
-  onLogout?: () => void
 }
 
 interface Stats {
@@ -45,7 +43,7 @@ interface Stats {
   hours: number
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBackToKiosk, onSessionEnded, onLogout }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBackToKiosk, onSessionEnded }) => {
   const { t } = useTranslation()
   const [tab, setTab] = useState<AdminTab>("overview")
   const [stats, setStats] = useState<Stats>({ totalEmployees: 0, working: 0, onBreak: 0, completed: 0, hours: 0 })
@@ -188,12 +186,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBack
             <ArrowLeft className="h-4 w-4 text-[#d6ab5b] rtl:rotate-180" aria-hidden />
             <span>{t("kiosk.title")}</span>
           </button>
-          {onLogout && (
-            <button type="button" onClick={onLogout} className="btn btn-danger">
-              <LogOut className="h-4 w-4" aria-hidden />
-              <span>{t("admin.logout")}</span>
-            </button>
-          )}
         </div>
       </div>
 

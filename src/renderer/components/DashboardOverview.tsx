@@ -2,25 +2,23 @@ import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   BarChart3,
-  Calendar,
+  Building2,
   CheckCircle2,
   Clock,
-  ExternalLink,
+  Gauge,
   MessageCircle,
+  Timer,
   TrendingUp,
-  UserCheck,
-  UserX,
-  Users
+  UserX
 } from "lucide-react"
 
 import { api } from "../services/api"
 import { errorKey, isApiError } from "../services/errors"
 import { addDays, formatDate, minutesToHours, monthStartKey, todayKey } from "../services/date"
 import { formatMoney } from "../services/money"
-import { AttendanceRecord, CompanySettings, Employee, Language, Payslip } from "../types"
+import { AttendanceRecord, CompanySettings, DashboardInsights, Employee, Language } from "../types"
 import { cleanPhoneNumber } from "../utils/whatsapp"
 
 interface DashboardOverviewProps {
@@ -39,9 +37,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
-  const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([])
   const [pastOpenRecords, setPastOpenRecords] = useState<AttendanceRecord[]>([])
-  const [payslips, setPayslips] = useState<Payslip[]>([])
+  const [insights, setInsights] = useState<DashboardInsights | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -49,20 +46,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     setLoading(true)
     setError(null)
     const today = todayKey()
-    const mStart = monthStartKey(today)
     try {
-      const [empList, todayList, mList, pastList, slipList] = await Promise.all([
+      const [empList, todayList, pastList, insightData] = await Promise.all([
         api.employees.list(true),
         api.attendance.today(),
-        api.attendance.list({ fromDate: mStart, toDate: today }),
         api.attendance.list({ fromDate: addDays(today, -30), toDate: addDays(today, -1) }),
-        api.payslips.list({})
+        api.reports.dashboardInsights(6)
       ])
       setEmployees(empList)
       setTodayRecords(todayList)
-      setMonthRecords(mList)
       setPastOpenRecords(pastList.filter(record => record.punchOutAt === null))
-      setPayslips(slipList)
+      setInsights(insightData)
     } catch (caught) {
       if (isApiError(caught) && caught.code === "unauthorized") {
         onSessionEnded(t("admin.sessionExpired"))
@@ -89,68 +83,59 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   }, [activeEmployees, todayRecords])
 
   const employeeMonthHours = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const record of monthRecords) {
-      if (record.punchOutAt !== null) {
-        const current = map.get(record.employeeId) || 0
-        map.set(record.employeeId, current + record.netMinutes)
-      }
-    }
-    const list = activeEmployees.map(employee => {
-      const minutes = map.get(employee.id) || 0
-      return {
-        id: employee.id,
-        name: employee.fullName,
-        code: employee.employeeCode,
-        department: employee.department,
-        hours: minutesToHours(minutes),
-        minutes
-      }
-    })
-    list.sort((a, b) => b.minutes - a.minutes)
+    const list = (insights?.hoursByEmployee ?? []).map(item => ({
+      ...item,
+      hours: minutesToHours(item.minutes)
+    }))
     const max = Math.max(...list.map(item => item.minutes), 1)
     return { list, max }
-  }, [activeEmployees, monthRecords])
+  }, [insights])
 
-  const monthlyPayrollTrends = useMemo(() => {
-    const monthsMap = new Map<string, number>()
-    const now = new Date()
-    const last6Keys: string[] = []
-
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-      last6Keys.push(key)
-      monthsMap.set(key, 0)
-    }
-
-    for (const slip of payslips) {
-      const key = slip.periodStart ? slip.periodStart.slice(0, 7) : ""
-      if (monthsMap.has(key)) {
-        const current = monthsMap.get(key) || 0
-        monthsMap.set(key, current + slip.netAmountMinor)
-      }
-    }
-
-    const items = last6Keys.map(key => {
-      const [year, month] = key.split("-").map(Number)
-      const date = new Date(year, month - 1, 1)
-      const label = date.toLocaleDateString(lang === "fa" ? "fa-IR" : lang === "ar" ? "ar-KW" : "en-US", {
+  const monthLabel = useCallback(
+    (monthKey: string) => {
+      const [year, month] = monthKey.split("-").map(Number)
+      return new Date(year, month - 1, 1).toLocaleDateString(lang === "fa" ? "fa-IR" : lang === "ar" ? "ar-KW" : "en-US", {
         month: "short"
       })
-      const totalMinor = monthsMap.get(key) || 0
-      return {
-        key,
-        label,
-        year,
-        totalMinor,
-        formatted: formatMoney(totalMinor, settings.currency, settings.currencyDecimals, lang)
-      }
-    })
+    },
+    [lang]
+  )
 
+  const monthlyPayrollTrends = useMemo(() => {
+    const items = (insights?.payrollTrend ?? []).map(point => ({
+      key: point.monthKey,
+      label: monthLabel(point.monthKey),
+      totalMinor: point.netAmountMinor,
+      formatted: formatMoney(point.netAmountMinor, settings.currency, settings.currencyDecimals, lang)
+    }))
     const maxMinor = Math.max(...items.map(item => item.totalMinor), 1)
     return { items, maxMinor }
-  }, [payslips, settings.currencyDecimals, lang])
+  }, [insights, monthLabel, settings.currency, settings.currencyDecimals, lang])
+
+  const overtimeTrend = useMemo(() => {
+    const items = (insights?.overtimeTrend ?? []).map(point => ({
+      key: point.monthKey,
+      label: monthLabel(point.monthKey),
+      minutes: point.overtimeMinutes,
+      hours: minutesToHours(point.overtimeMinutes),
+      amount: point.overtimeAmountMinor
+    }))
+    const maxMinutes = Math.max(...items.map(item => item.minutes), 1)
+    return { items, maxMinutes }
+  }, [insights, monthLabel])
+
+  const departmentCosts = useMemo(() => {
+    const rows = (insights?.departmentCosts ?? []).map(row => ({
+      ...row,
+      formatted: formatMoney(row.netAmountMinor, settings.currency, settings.currencyDecimals, lang),
+      overtimeHours: minutesToHours(row.overtimeMinutes)
+    }))
+    const maxMinor = Math.max(...rows.map(row => row.netAmountMinor), 1)
+    return { rows, maxMinor }
+  }, [insights, settings.currency, settings.currencyDecimals, lang])
+
+  const absence = insights?.absence ?? null
+  const absencePercent = absence ? Math.round(absence.rate * 1000) / 10 : 0
 
   const sendWhatsAppPrompt = (employee: Employee) => {
     if (!employee.phone) return
@@ -395,6 +380,146 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               )
             })}
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="panel space-y-4 p-5 lg:col-span-5">
+          <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(214,171,91,0.35)] bg-[rgba(214,171,91,0.12)] text-[#e6c98a]">
+                <Building2 className="h-4 w-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-[#f4ece0]">{t("dashboard.analytics.departmentCosts")}</h3>
+                <p className="text-[0.68rem] text-[#8d8275]">
+                  {t("dashboard.analytics.departmentCostsHint", { count: insights?.range.months ?? 6 })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {departmentCosts.rows.length === 0 ? (
+            <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
+          ) : (
+            <div className="space-y-2.5">
+              {departmentCosts.rows.map(row => {
+                const percent = Math.min(100, Math.max(4, Math.round((row.netAmountMinor / departmentCosts.maxMinor) * 100)))
+                return (
+                  <div key={row.department} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate font-medium text-[#f4ece0]">
+                        {row.department}
+                        <span className="ms-1.5 font-mono text-[0.66rem] text-[#8d8275]">
+                          ({row.employees} {t("employees.employee")})
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono font-semibold text-[#e6c98a]" dir="ltr">
+                        {row.formatted}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,246,230,0.06)]">
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,rgba(214,171,91,0.55),#d6ab5b)] transition-all duration-500"
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="panel space-y-4 p-5 lg:col-span-4">
+          <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(235,160,80,0.35)] bg-[rgba(235,160,80,0.12)] text-[#e6b276]">
+                <Timer className="h-4 w-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-[#f4ece0]">{t("dashboard.analytics.overtimeTrend")}</h3>
+                <p className="text-[0.68rem] text-[#8d8275]">{t("dashboard.analytics.overtimeTrendHint")}</p>
+              </div>
+            </div>
+          </div>
+
+          {overtimeTrend.items.length === 0 ? (
+            <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
+          ) : (
+            <div className="flex h-44 items-end justify-between gap-2 pt-4">
+              {overtimeTrend.items.map(item => {
+                const heightPercent = item.minutes > 0
+                  ? Math.max(12, Math.round((item.minutes / overtimeTrend.maxMinutes) * 100))
+                  : 5
+                return (
+                  <div key={item.key} className="group flex flex-1 flex-col items-center justify-end gap-2">
+                    <span className="font-mono text-[0.6rem] font-semibold text-[#e6b276] opacity-0 transition-opacity group-hover:opacity-100">
+                      {item.hours} {t("common.hours")}
+                    </span>
+                    <div className="flex h-28 w-full max-w-[30px] items-end overflow-hidden rounded-t-md bg-[rgba(255,246,230,0.06)]">
+                      <div
+                        className="w-full rounded-t-md bg-[linear-gradient(180deg,#e6b276,#b3762f)] transition-all duration-500 group-hover:brightness-110"
+                        style={{ height: `${heightPercent}%` }}
+                      />
+                    </div>
+                    <span className="text-[0.64rem] font-semibold text-[#8d8275]">{item.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="panel space-y-4 p-5 lg:col-span-3">
+          <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(200,95,78,0.35)] bg-[rgba(200,95,78,0.12)] text-[#e9a094]">
+                <Gauge className="h-4 w-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-[#f4ece0]">{t("dashboard.analytics.absenceRate")}</h3>
+                <p className="text-[0.68rem] text-[#8d8275]">{t("dashboard.analytics.absenceHint")}</p>
+              </div>
+            </div>
+          </div>
+
+          {!absence || !absence.hasData ? (
+            <p className="py-12 text-center text-xs text-[#8d8275]">{t("dashboard.analytics.noData")}</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-3xl font-bold text-[#e9a094]">{absencePercent}%</span>
+                <span className="text-[0.68rem] text-[#8d8275]">
+                  {absence.absentDays} / {absence.expectedDays}
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(255,246,230,0.06)]">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,rgba(200,95,78,0.55),#c85f4e)] transition-all duration-500"
+                  style={{ width: `${Math.min(100, absencePercent)}%` }}
+                />
+              </div>
+              <dl className="grid grid-cols-2 gap-2 text-[0.68rem]">
+                <div>
+                  <dt className="text-[#8d8275]">{t("dashboard.analytics.daysPresent")}</dt>
+                  <dd className="font-mono font-semibold text-[#78dcbc]">{absence.presentDays}</dd>
+                </div>
+                <div>
+                  <dt className="text-[#8d8275]">{t("dashboard.analytics.daysLeave")}</dt>
+                  <dd className="font-mono font-semibold text-[#e6c98a]">{absence.leaveDays}</dd>
+                </div>
+                <div>
+                  <dt className="text-[#8d8275]">{t("dashboard.analytics.daysAbsent")}</dt>
+                  <dd className="font-mono font-semibold text-[#e9a094]">{absence.absentDays}</dd>
+                </div>
+                <div>
+                  <dt className="text-[#8d8275]">{t("dashboard.analytics.daysExpected")}</dt>
+                  <dd className="font-mono font-semibold text-slate-300">{absence.expectedDays}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
         </div>
       </div>
     </div>

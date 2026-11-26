@@ -819,6 +819,188 @@ function aggregateAttendance({ employeeId, fromDate, toDate, dailyHours = 8 } = 
 }
 
 
+function dashboardInsights({ today = time.localDateKey(), months = 6 } = {}) {
+  const db = getDb()
+  const settings = shiftSettings(db)
+  const safeMonths = Math.min(24, Math.max(1, Math.round(Number(months) || 6)))
+  assertDateKey(today, "Today")
+
+  const [year, month] = today.split("-").map(Number)
+  const monthKeys = []
+  for (let offset = safeMonths - 1; offset >= 0; offset -= 1) {
+    const date = new Date(year, month - 1 - offset, 1)
+    monthKeys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`)
+  }
+  const rangeStart = `${monthKeys[0]}-01`
+  const currentMonthStart = `${monthKeys[monthKeys.length - 1]}-01`
+  const departmentExpr = "COALESCE(NULLIF(TRIM(p.department), ''), '-')"
+
+  const departmentCosts = db
+    .prepare(
+      `
+      SELECT
+        ${departmentExpr} AS department,
+        COUNT(DISTINCT p.employee_id) AS employees,
+        COUNT(*) AS slips,
+        SUM(p.net_amount_minor) AS net_amount_minor,
+        SUM(p.overtime_amount_minor) AS overtime_amount_minor,
+        SUM(p.overtime_minutes) AS overtime_minutes,
+        SUM(p.worked_minutes) AS worked_minutes
+      FROM payslips p
+      WHERE p.period_start >= ? AND p.period_start <= ?
+      GROUP BY ${departmentExpr}
+      ORDER BY net_amount_minor DESC, department ASC
+    `
+    )
+    .all(rangeStart, today)
+    .map(row => ({
+      department: String(row.department ?? "-"),
+      employees: Number(row.employees ?? 0),
+      slips: Number(row.slips ?? 0),
+      netAmountMinor: Number(row.net_amount_minor ?? 0),
+      overtimeAmountMinor: Number(row.overtime_amount_minor ?? 0),
+      overtimeMinutes: Number(row.overtime_minutes ?? 0),
+      workedMinutes: Number(row.worked_minutes ?? 0)
+    }))
+
+  const overtimeByMonth = new Map(
+    db
+      .prepare(
+        `
+        SELECT
+          substr(p.period_start, 1, 7) AS month_key,
+          SUM(p.overtime_minutes) AS overtime_minutes,
+          SUM(p.overtime_amount_minor) AS overtime_amount_minor
+        FROM payslips p
+        WHERE p.period_start >= ? AND p.period_start <= ?
+        GROUP BY month_key
+      `
+      )
+      .all(rangeStart, today)
+      .map(row => [
+        String(row.month_key),
+        {
+          overtimeMinutes: Number(row.overtime_minutes ?? 0),
+          overtimeAmountMinor: Number(row.overtime_amount_minor ?? 0)
+        }
+      ])
+  )
+
+  const overtimeTrend = monthKeys.map(monthKey => ({
+    monthKey,
+    overtimeMinutes: overtimeByMonth.get(monthKey)?.overtimeMinutes ?? 0,
+    overtimeAmountMinor: overtimeByMonth.get(monthKey)?.overtimeAmountMinor ?? 0
+  }))
+
+  const payrollByMonth = new Map(
+    db
+      .prepare(
+        `
+        SELECT substr(p.period_start, 1, 7) AS month_key, SUM(p.net_amount_minor) AS net_amount_minor
+        FROM payslips p
+        WHERE p.period_start >= ? AND p.period_start <= ?
+        GROUP BY month_key
+      `
+      )
+      .all(rangeStart, today)
+      .map(row => [String(row.month_key), Number(row.net_amount_minor ?? 0)])
+  )
+
+  const payrollTrend = monthKeys.map(monthKey => ({
+    monthKey,
+    netAmountMinor: payrollByMonth.get(monthKey) ?? 0
+  }))
+
+  const hoursByEmployee = db
+    .prepare(
+      `
+      SELECT
+        a.employee_id AS id,
+        e.full_name AS name,
+        e.employee_code AS code,
+        COALESCE(e.department, '') AS department,
+        SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.net_minutes ELSE 0 END) AS minutes
+      FROM attendance_records a
+      JOIN employees e ON e.id = a.employee_id
+      WHERE a.record_date >= ? AND a.record_date <= ? AND e.is_active = 1
+      GROUP BY a.employee_id
+      HAVING SUM(CASE WHEN a.punch_out_at IS NOT NULL THEN a.net_minutes ELSE 0 END) > 0
+      ORDER BY minutes DESC
+      LIMIT 10
+    `
+    )
+    .all(currentMonthStart, today)
+    .map(row => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      code: String(row.code ?? ""),
+      department: String(row.department ?? ""),
+      minutes: Number(row.minutes ?? 0)
+    }))
+
+  const activeEmployees = Number(
+    db.prepare("SELECT COUNT(*) AS n FROM employees WHERE is_active = 1").get()?.n ?? 0
+  )
+  const expectedDays = shift.workingDayKeys(currentMonthStart, today, settings.workDays).length * activeEmployees
+  const presentDays = Number(
+    db
+      .prepare(
+        `
+        SELECT COUNT(*) AS n FROM (
+          SELECT a.employee_id, a.record_date
+          FROM attendance_records a
+          JOIN employees e ON e.id = a.employee_id
+          WHERE a.record_date >= ? AND a.record_date <= ? AND a.punch_in_at IS NOT NULL AND e.is_active = 1
+          GROUP BY a.employee_id, a.record_date
+        )
+      `
+      )
+      .get(currentMonthStart, today)?.n ?? 0
+  )
+
+  const leaveRows = db
+    .prepare(
+      `
+      SELECT l.employee_id AS employee_id, l.start_date AS start_date, l.end_date AS end_date
+      FROM leaves l
+      JOIN employees e ON e.id = l.employee_id
+      WHERE e.is_active = 1 AND l.start_date <= ? AND l.end_date >= ?
+    `
+    )
+    .all(today, currentMonthStart)
+  const leaveDates = new Set()
+  for (const row of leaveRows) {
+    const startKey = String(row.start_date) < currentMonthStart ? currentMonthStart : String(row.start_date)
+    const endKey = String(row.end_date) > today ? today : String(row.end_date)
+    for (const key of shift.workingDayKeys(startKey, endKey, settings.workDays)) {
+      leaveDates.add(`${row.employee_id}|${key}`)
+    }
+  }
+
+  const leaveDays = leaveDates.size
+  const absentDays = Math.max(0, expectedDays - presentDays - leaveDays)
+  const absenceRate = expectedDays > 0 ? absentDays / expectedDays : 0
+
+  return {
+    generatedAt: new Date().toISOString(),
+    range: { fromDate: rangeStart, toDate: today, monthStart: currentMonthStart, months: safeMonths },
+    departmentCosts,
+    overtimeTrend,
+    payrollTrend,
+    hoursByEmployee,
+    absence: {
+      expectedDays,
+      presentDays,
+      leaveDays,
+      absentDays,
+      rate: Math.round(absenceRate * 1000) / 1000,
+      activeEmployees,
+      workDaysPerWeek: settings.workDays.length,
+      hasData: expectedDays > 0 && presentDays + leaveDays > 0
+    }
+  }
+}
+
 function leaveQuery(db, { employeeId, fromDate, toDate } = {}) {
   const clauses = []
   const params = []
@@ -1700,6 +1882,7 @@ module.exports = {
   countAttendance,
   payslipsPage,
   countPayslips,
+  dashboardInsights,
   dataCounts,
   logDatabaseRestore,
   importAll

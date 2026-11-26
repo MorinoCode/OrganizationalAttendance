@@ -75,6 +75,16 @@
     "analytics": {
       "hoursThisMonth": "Staff worked hours this month",
       "payrollCostTrend": "Company payroll cost trend (last 6 months)",
+      "departmentCosts": "Payroll cost by department",
+      "departmentCostsHint": "Last {{count}} months",
+      "overtimeTrend": "Overtime trend",
+      "overtimeTrendHint": "Overtime hours per month",
+      "absenceRate": "Absence rate",
+      "absenceHint": "Current month to date",
+      "daysPresent": "Days present",
+      "daysLeave": "Leave days",
+      "daysAbsent": "Absent days",
+      "daysExpected": "Expected days",
       "noData": "No data recorded to display yet."
     }
   },
@@ -307,13 +317,15 @@
       "title": "Software Online Update",
       "subtitle": "Check and download the latest version without touching the database",
       "idle": "System is ready to check for updates.",
-      "checking": "Checking GitHub server...",
+      "checking": "Checking the update server...",
       "available": "New version {{version}} is available.",
       "downloading": "Downloading update package ({{percent}}%)...",
       "ready": "New version downloaded and ready to install.",
       "upToDate": "You are using the latest stable version.",
       "devMode": "Automatic updates are disabled in development mode.",
+      "notConfigured": "No update feed is configured for this build (HOZOR_UPDATE_URL), so automatic checks are off.",
       "failed": "Failed to connect to update server (check internet connection).",
+      "installFailed": "The update must finish downloading before it can be installed.",
       "checkButton": "Check for Updates",
       "downloadButton": "Download Update",
       "installButton": "Restart & Install"

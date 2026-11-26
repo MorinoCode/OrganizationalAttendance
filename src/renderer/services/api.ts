@@ -8,6 +8,7 @@ import {
   BackupPreview,
   BackupStatus,
   CompanySettings,
+  DashboardInsights,
   Employee,
   ExcelExportSpec,
   ExportProgress,
@@ -17,7 +18,8 @@ import {
   PagedResult,
   Payslip,
   PublicEmployee,
-  RestoreSnapshotResult
+  RestoreSnapshotResult,
+  UpdaterStatus
 } from "../types"
 import { ApiError } from "./errors"
 
@@ -87,6 +89,7 @@ interface Bridge {
   }
   reports: {
     monthClose(data: { fromDate?: string; toDate?: string }, token: string | null): Promise<Envelope<MonthCloseReport>>
+    dashboardInsights(data: { months?: number }, token: string | null): Promise<Envelope<DashboardInsights>>
   }
   audit: { list(data: { limit?: number }, token: string | null): Promise<Envelope<AuditLogEntry[]>> }
   backup: {
@@ -114,10 +117,11 @@ interface Bridge {
     onProgress(callback: (progress: ExportProgress) => void): () => void
   }
   updater: {
-    check(): Promise<Envelope<{ status: string; version: string | null; currentVersion?: string; percent?: number; error?: string | null }>>
-    download(): Promise<Envelope<{ ok: boolean; error?: string }>>
-    install(): Promise<Envelope<{ ok: boolean }>>
-    status(): Promise<Envelope<{ status: string; version: string | null; currentVersion?: string; percent?: number; error?: string | null; isPackaged?: boolean }>>
+    check(token: string | null): Promise<Envelope<UpdaterStatus>>
+    download(token: string | null): Promise<Envelope<{ ok: boolean; error?: string; reason?: string }>>
+    install(token: string | null): Promise<Envelope<{ ok: boolean; reason?: string }>>
+    status(token: string | null): Promise<Envelope<UpdaterStatus>>
+    onEvent(callback: (status: UpdaterStatus) => void): () => void
   }
 }
 
@@ -223,7 +227,8 @@ export const api = {
   },
   reports: {
     monthClose: (fromDate: string, toDate: string) =>
-      unwrap(bridge().reports.monthClose({ fromDate, toDate }, sessionToken))
+      unwrap(bridge().reports.monthClose({ fromDate, toDate }, sessionToken)),
+    dashboardInsights: (months = 6) => unwrap(bridge().reports.dashboardInsights({ months }, sessionToken))
   },
   audit: {
     list: (limit = 50) => unwrap(bridge().audit.list({ limit }, sessionToken))
@@ -249,9 +254,10 @@ export const api = {
     onProgress: (callback: (progress: ExportProgress) => void) => bridge().exporter.onProgress(callback)
   },
   updater: {
-    check: () => unwrap(bridge().updater.check()),
-    download: () => unwrap(bridge().updater.download()),
-    install: () => unwrap(bridge().updater.install()),
-    status: () => unwrap(bridge().updater.status())
+    check: () => unwrap(bridge().updater.check(sessionToken)),
+    download: () => unwrap(bridge().updater.download(sessionToken)),
+    install: () => unwrap(bridge().updater.install(sessionToken)),
+    status: () => unwrap(bridge().updater.status(sessionToken)),
+    onEvent: (callback: (status: UpdaterStatus) => void) => bridge().updater.onEvent(callback)
   }
 }
