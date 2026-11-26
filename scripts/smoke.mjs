@@ -13,6 +13,7 @@ const dataDir = path.join(root, ".smoke-data")
 const vitePort = Number(process.env.SMOKE_VITE_PORT || 5199)
 const cdpPort = Number(process.env.SMOKE_CDP_PORT || 9450)
 const PASSWORD = "Smoke#2026pass"
+const viteBin = path.join(root, "node_modules", "vite", "bin", "vite.js")
 
 const children = []
 const startedAt = Date.now()
@@ -86,6 +87,25 @@ async function waitFor(readiness, label, timeoutMs = 45_000) {
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   throw new Error(`Timed out waiting for ${label}`)
+}
+
+function prebundleViteDependencies() {
+  const result = spawnSync(process.execPath, [viteBin, "optimize", "--force"], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env
+  })
+  if (result.status !== 0) {
+    const detail = `${result.stdout || ""}\n${result.stderr || ""}`.trim().split("\n").slice(-5).join(" ")
+    throw new Error(`vite dependency pre-bundle failed (${result.status ?? result.signal}): ${detail}`)
+  }
+}
+
+async function warmDevServer() {
+  await request(`http://127.0.0.1:${vitePort}/@vite/client`)
+  const html = await request(`http://127.0.0.1:${vitePort}/`)
+  const entry = /<script[^>]+src="([^"]*\/src\/renderer\/main\.tsx)"/.exec(html.body)?.[1]
+  await request(new URL(entry || "/src/renderer/main.tsx", `http://127.0.0.1:${vitePort}/`).toString())
 }
 
 async function connectToPage() {
@@ -225,9 +245,13 @@ async function main() {
   log(`seeded throwaway database in ${path.relative(root, dataDir)}`)
   console.log(`  PASS  database seed — 2 completed shifts, 1 idle employee, 1 payslip (${seed.payslip.number})`)
 
+  prebundleViteDependencies()
+  pass("vite dependency cache", "pre-bundled with the current lockfile before launch")
+
   startProcess("vite", "npx", ["vite", "--host", "127.0.0.1", "--port", String(vitePort), "--strictPort"])
   await waitFor(async () => (await request(`http://127.0.0.1:${vitePort}/`)).status === 200, "vite dev server")
-  pass("vite dev server", `http://127.0.0.1:${vitePort}`)
+  await warmDevServer()
+  pass("vite dev server", `http://127.0.0.1:${vitePort} (entry module pre-compiled)`)
 
   startProcess("electron", "npx", ["electron", ".", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`], {
     env: { VITE_DEV_SERVER_URL: `http://127.0.0.1:${vitePort}/` }
@@ -236,20 +260,31 @@ async function main() {
   pass("electron window", "renderer attached over CDP")
 
   try {
-    const booted = await evaluate(
+    const boot = await evaluate(
       client,
       `(async () => {
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-        for (let i = 0; i < 120; i += 1) {
-          const text = document.body.innerText
-          if (text.trim().length > 20 && !/(جارٍ تحميل|در حال بارگذاری|Loading)/i.test(text)) return true
+        let origin = performance.timeOrigin
+        let stable = 0
+        for (let i = 0; i < 240; i += 1) {
           await sleep(250)
+          if (performance.timeOrigin !== origin) {
+            origin = performance.timeOrigin
+            stable = 0
+            continue
+          }
+          const text = document.body.innerText
+          const painted = document.readyState === "complete" &&
+            text.trim().length > 20 &&
+            !/(جارٍ تحميل|در حال بارگذاری|Loading)/i.test(text)
+          stable = painted ? stable + 1 : 0
+          if (stable >= 4) return { origin, stable }
         }
-        return false
+        return { origin, stable }
       })()`
     )
-    if (!booted) fail("app boot", "window never rendered content")
-    pass("app boot", "kiosk/login screen rendered")
+    if (!boot || boot.stable < 4) fail("app boot", "window never rendered a stable document")
+    pass("app boot", "kiosk/login screen rendered from a stable document")
 
     const login = await evaluate(
       client,
@@ -290,6 +325,12 @@ async function main() {
     )
     if (login !== "ok") fail("admin login", String(login))
     pass("admin login", "admin dashboard opened")
+
+    const originAfterLogin = await evaluate(client, `performance.timeOrigin`)
+    if (originAfterLogin !== boot.origin) {
+      fail("renderer stability", "page reloaded while signing in (dependency optimization)")
+    }
+    pass("renderer stability", "no page reload between boot and the admin session")
 
     const version = await evaluate(client, `window.api.app.info().then(response => response.data?.version ?? null)`)
     if (!version) fail("app info", "version missing")
@@ -410,20 +451,38 @@ async function main() {
       client,
       `(async () => {
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-        const nav = [...document.querySelectorAll("button, a")].find(node =>
+        const waitFor = async (finder, timeoutMs = 8000) => {
+          const deadline = Date.now() + timeoutMs
+          while (Date.now() < deadline) {
+            const found = finder()
+            if (found) return found
+            await sleep(250)
+          }
+          return null
+        }
+        if (performance.timeOrigin !== ${boot.origin}) {
+          return { error: "renderer-reloaded", text: "document replaced mid-scenario; the admin session was lost" }
+        }
+        const nav = await waitFor(() => [...document.querySelectorAll("button, a")].find(node =>
           /فیش‌های حقوق|كشوف الرواتب|Payroll/i.test((node.textContent || "").trim())
-        )
-        if (!nav) return { error: "no-payroll-nav" }
+        ))
+        if (!nav) return { error: "no-payroll-nav", text: document.body.innerText.slice(0, 200) }
         nav.click()
-        await sleep(2500)
-        const preview = [...document.querySelectorAll("button")].find(node =>
+        const preview = await waitFor(() => [...document.querySelectorAll("button")].find(node =>
           /(معاينة|پیش‌نمایش|Preview)/i.test((node.getAttribute("title") || "") + (node.textContent || "")) ||
           /(معاينة|پیش‌نمایش|Preview)/i.test(node.getAttribute("aria-label") || "")
-        )
+        ))
         if (!preview) return { error: "no-preview-button", text: document.body.innerText.slice(0, 300) }
         preview.click()
-        await sleep(1500)
-        const dialog = document.querySelector('[role="dialog"]')
+        const dialog = await waitFor(() => {
+          const node = document.querySelector('[role="dialog"]')
+          if (!node) return null
+          const hasPrint = [...node.querySelectorAll("button")].some(button =>
+            /(طباعة|چاپ|Print)/i.test((button.textContent || "").trim())
+          )
+          return hasPrint ? node : null
+        })
+        if (!dialog) return { error: "no-preview-dialog", text: document.body.innerText.slice(0, 300) }
         const printButton = [...document.querySelectorAll('[role="dialog"] button')].find(node =>
           /(طباعة|چاپ|Print)/i.test((node.textContent || "").trim())
         )

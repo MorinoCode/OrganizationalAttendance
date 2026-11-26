@@ -60,10 +60,9 @@ export function getPresetDateRange(preset: DatePreset): { start: string; end: st
   }
   if (preset === "thisWeek") {
     const now = new Date()
-    const day = now.getDay()
-    const diffToSunday = (day + 1) % 7
+    const daysSinceSunday = now.getDay()
     const sunday = new Date(now)
-    sunday.setDate(now.getDate() - diffToSunday)
+    sunday.setDate(now.getDate() - daysSinceSunday)
     return {
       start: localDateKey(sunday),
       end: today

@@ -360,39 +360,39 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
               </div>
 
               <div className="flex flex-1 flex-col justify-end gap-4 px-7 py-7">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <button
                     type="button"
                     onClick={handlePunchIn}
                     disabled={hasShift || isBusy}
-                    className={`group relative flex h-[7.5rem] flex-col items-start justify-between overflow-hidden rounded-2xl border p-4 text-start transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#46c39f]/50 ${
+                    className={`group relative flex h-40 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border p-5 text-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#46c39f]/50 ${
                       hasShift || isBusy
                         ? "cursor-not-allowed border-[color:var(--line)] bg-[rgba(255,246,230,0.015)] text-[#5c5349]"
-                        : "border-[rgba(70,195,159,0.4)] bg-[linear-gradient(160deg,rgba(43,166,136,0.2),rgba(43,166,136,0.04))] text-[#d8f8ec] hover:-translate-y-0.5 hover:border-[rgba(70,195,159,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(43,166,136,0.9)] active:translate-y-0"
+                        : "border-[rgba(70,195,159,0.4)] bg-[linear-gradient(160deg,rgba(43,166,136,0.2),rgba(43,166,136,0.04))] text-[#d8f8ec] hover:-translate-y-1 hover:border-[rgba(70,195,159,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(43,166,136,0.9)] active:translate-y-0"
                     }`}
                   >
-                    <span className="grid h-9 w-9 place-items-center rounded-lg border border-[rgba(255,246,230,0.12)] bg-[rgba(11,10,8,0.35)]">
-                      <Play className="h-4 w-4" aria-hidden />
+                    <span className="grid h-16 w-16 place-items-center rounded-2xl border border-[rgba(255,246,230,0.16)] bg-[rgba(11,10,8,0.45)] shadow-inner transition-transform group-hover:scale-110">
+                      <Play className="h-8 w-8 ms-1 fill-current" aria-hidden />
                     </span>
-                    <span className="text-[0.95rem] font-semibold">{t("kiosk.startShift")}</span>
+                    <span className="text-[1.05rem] font-bold tracking-tight">{t("kiosk.startShift")}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleToggleBreak}
                     disabled={!hasShift || isBusy}
-                    className={`group relative flex h-[7.5rem] flex-col items-start justify-between overflow-hidden rounded-2xl border p-4 text-start transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d8954e]/50 ${
+                    className={`group relative flex h-40 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border p-5 text-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d8954e]/50 ${
                       !hasShift || isBusy
                         ? "cursor-not-allowed border-[color:var(--line)] bg-[rgba(255,246,230,0.015)] text-[#5c5349]"
                         : record?.status === "on_break"
-                          ? "border-[rgba(216,149,78,0.75)] bg-[linear-gradient(160deg,rgba(216,149,78,0.34),rgba(216,149,78,0.08))] text-[#f9ead3] hover:-translate-y-0.5 active:translate-y-0"
-                          : "border-[rgba(216,149,78,0.4)] bg-[linear-gradient(160deg,rgba(192,120,52,0.2),rgba(192,120,52,0.04))] text-[#f1d1a5] hover:-translate-y-0.5 hover:border-[rgba(216,149,78,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(192,120,52,0.9)] active:translate-y-0"
+                          ? "border-[rgba(216,149,78,0.75)] bg-[linear-gradient(160deg,rgba(216,149,78,0.34),rgba(216,149,78,0.08))] text-[#f9ead3] hover:-translate-y-1 active:translate-y-0"
+                          : "border-[rgba(216,149,78,0.4)] bg-[linear-gradient(160deg,rgba(192,120,52,0.2),rgba(192,120,52,0.04))] text-[#f1d1a5] hover:-translate-y-1 hover:border-[rgba(216,149,78,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(192,120,52,0.9)] active:translate-y-0"
                     }`}
                   >
-                    <span className="grid h-9 w-9 place-items-center rounded-lg border border-[rgba(255,246,230,0.12)] bg-[rgba(11,10,8,0.35)]">
-                      <Coffee className="h-4 w-4" aria-hidden />
+                    <span className="grid h-16 w-16 place-items-center rounded-2xl border border-[rgba(255,246,230,0.16)] bg-[rgba(11,10,8,0.45)] shadow-inner transition-transform group-hover:scale-110">
+                      <Coffee className="h-8 w-8" aria-hidden />
                     </span>
-                    <span className="text-[0.95rem] font-semibold">
+                    <span className="text-[1.05rem] font-bold tracking-tight">
                       {record?.status === "on_break" ? t("kiosk.endBreak") : t("kiosk.takeBreak")}
                     </span>
                   </button>
@@ -401,16 +401,16 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
                     type="button"
                     onClick={handlePunchOut}
                     disabled={!hasShift || isBusy}
-                    className={`group relative flex h-[7.5rem] flex-col items-start justify-between overflow-hidden rounded-2xl border p-4 text-start transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c85f4e]/50 ${
+                    className={`group relative flex h-40 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border p-5 text-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c85f4e]/50 ${
                       !hasShift || isBusy
                         ? "cursor-not-allowed border-[color:var(--line)] bg-[rgba(255,246,230,0.015)] text-[#5c5349]"
-                        : "border-[rgba(200,95,78,0.4)] bg-[linear-gradient(160deg,rgba(173,72,57,0.22),rgba(173,72,57,0.04))] text-[#f4c6bd] hover:-translate-y-0.5 hover:border-[rgba(200,95,78,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(173,72,57,0.9)] active:translate-y-0"
+                        : "border-[rgba(200,95,78,0.4)] bg-[linear-gradient(160deg,rgba(173,72,57,0.22),rgba(173,72,57,0.04))] text-[#f4c6bd] hover:-translate-y-1 hover:border-[rgba(200,95,78,0.75)] hover:shadow-[0_18px_36px_-26px_rgba(173,72,57,0.9)] active:translate-y-0"
                     }`}
                   >
-                    <span className="grid h-9 w-9 place-items-center rounded-lg border border-[rgba(255,246,230,0.12)] bg-[rgba(11,10,8,0.35)]">
-                      <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    <span className="grid h-16 w-16 place-items-center rounded-2xl border border-[rgba(255,246,230,0.16)] bg-[rgba(11,10,8,0.45)] shadow-inner transition-transform group-hover:scale-110">
+                      <CheckCircle2 className="h-8 w-8" aria-hidden />
                     </span>
-                    <span className="text-[0.95rem] font-semibold">{t("kiosk.finishShift")}</span>
+                    <span className="text-[1.05rem] font-bold tracking-tight">{t("kiosk.finishShift")}</span>
                   </button>
                 </div>
 
