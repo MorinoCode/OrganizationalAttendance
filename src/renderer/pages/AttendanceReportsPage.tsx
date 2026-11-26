@@ -277,11 +277,11 @@ export const AttendanceReportsPage: React.FC<AttendanceReportsPageProps> = ({ se
                 setEmployeeId(event.target.value)
                 setPage(1)
               }}
-              className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
             >
-              <option value="">{t("attendance.allEmployees")}</option>
+              <option value="" className="bg-[#14110d] text-[#f4ece0]">{t("attendance.allEmployees")}</option>
               {employees.map(employee => (
-                <option key={employee.id} value={employee.id}>
+                <option key={employee.id} value={employee.id} className="bg-[#14110d] text-[#f4ece0]">
                   {employee.fullName} ({employee.employeeCode})
                 </option>
               ))}

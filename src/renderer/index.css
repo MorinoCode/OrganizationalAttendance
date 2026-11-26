@@ -83,6 +83,15 @@
     caret-color: var(--brass);
   }
 
+  select {
+    color-scheme: dark;
+  }
+
+  select option {
+    background-color: var(--ink-900);
+    color: var(--cream);
+  }
+
   input[type="checkbox"],
   input[type="radio"] {
     accent-color: var(--brass);

@@ -531,11 +531,11 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
               value={filterEmployeeId}
               onChange={event => setFilterEmployeeId(event.target.value)}
               aria-label={t("attendance.filterByEmployee")}
-              className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-3 py-2 text-xs text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-3 py-2 text-xs text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
             >
-              <option value="">{t("attendance.allEmployees")}</option>
+              <option value="" className="bg-[#14110d] text-[#f4ece0]">{t("attendance.allEmployees")}</option>
               {employees.map(employee => (
-                <option key={employee.id} value={employee.id}>
+                <option key={employee.id} value={employee.id} className="bg-[#14110d] text-[#f4ece0]">
                   {employee.fullName} ({employee.employeeCode})
                 </option>
               ))}
@@ -883,10 +883,10 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                   required
                   value={form.employeeId}
                   onChange={event => setForm({ ...form, employeeId: event.target.value })}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none"
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-4 py-2.5 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
                 >
                   {employees.map(employee => (
-                    <option key={employee.id} value={employee.id}>
+                    <option key={employee.id} value={employee.id} className="bg-[#14110d] text-[#f4ece0]">
                       {employee.fullName} ({employee.employeeCode}) — {t(`employees.salaryTypes.${employee.salaryType}`)}
                     </option>
                   ))}
@@ -1102,10 +1102,10 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
                     id="payslip-method"
                     value={form.paymentMethod}
                     onChange={event => setForm({ ...form, paymentMethod: event.target.value as PaymentMethod })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-[rgba(255,246,230,0.045)] px-3 py-2 text-sm text-[#f4ece0] focus:border-[rgba(214,171,91,0.6)] focus:outline-none [color-scheme:dark]"
                   >
                     {PAYMENT_METHODS.map(method => (
-                      <option key={method} value={method}>
+                      <option key={method} value={method} className="bg-[#14110d] text-[#f4ece0]">
                         {t(`payroll.paymentMethods.${method}`)}
                       </option>
                     ))}
