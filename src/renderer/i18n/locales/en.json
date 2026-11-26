@@ -356,6 +356,8 @@
     "optional": "optional",
     "noData": "No data",
     "none": "-",
+    "success": "Success",
+    "notice": "Notice",
     "error": "Error"
   },
   "errors": {

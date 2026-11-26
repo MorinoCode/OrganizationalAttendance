@@ -133,9 +133,7 @@ export const App: React.FC = () => {
       />
 
       {notice && (
-        <div className="mx-auto w-full max-w-[88rem] px-4 pt-4 sm:px-8 no-print">
-          <FeedbackBanner tone="info" message={notice} onClose={() => setNotice(null)} />
-        </div>
+        <FeedbackBanner tone="info" message={notice} onClose={() => setNotice(null)} />
       )}
 
       <main className="flex-1">

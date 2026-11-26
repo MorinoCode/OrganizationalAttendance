@@ -356,6 +356,8 @@
     "optional": "اختياري",
     "noData": "لا توجد بيانات",
     "none": "-",
+    "success": "نجاح",
+    "notice": "إشعار",
     "error": "خطأ"
   },
   "errors": {

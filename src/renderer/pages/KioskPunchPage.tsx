@@ -193,9 +193,7 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
   return (
     <div className="mx-auto max-w-[88rem] px-4 py-7 sm:px-8">
       {feedback && (
-        <div className="mb-5 no-print">
-          <FeedbackBanner tone={feedback.tone} message={feedback.message} onClose={() => setFeedback(null)} />
-        </div>
+        <FeedbackBanner tone={feedback.tone} message={feedback.message} onClose={() => setFeedback(null)} />
       )}
 
       <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
