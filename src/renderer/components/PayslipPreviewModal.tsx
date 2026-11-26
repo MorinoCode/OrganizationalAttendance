@@ -48,6 +48,15 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="payslip-preview-title"
+        data-testid="payslip-preview"
+        data-payslip-id={payslip.id}
+        data-payslip-number={payslip.number}
+        data-period-start={payslip.periodStart}
+        data-period-end={payslip.periodEnd}
+        data-base-minor={payslip.baseSalaryMinor}
+        data-net-minor={payslip.netAmountMinor}
+        data-overtime-minutes={payslip.overtimeMinutes}
+        data-overtime-minor={payslip.overtimeAmountMinor}
         className="custom-scrollbar panel flex max-h-[96vh] w-full max-w-4xl flex-col overflow-hidden border border-[rgba(214,171,91,0.35)] shadow-2xl"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] bg-[rgba(20,17,13,0.95)] px-6 py-4">

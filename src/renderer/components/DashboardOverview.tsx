@@ -350,7 +350,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           )}
         </div>
 
-        <div className="panel space-y-4 p-5 lg:col-span-6">
+        <div className="panel space-y-4 p-5 lg:col-span-6" data-testid="payroll-cost-trend">
           <div className="flex items-center justify-between border-b border-[color:var(--line)] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="grid h-8 w-8 place-items-center rounded-lg border border-[rgba(120,220,188,0.35)] bg-[rgba(43,166,136,0.12)] text-[#78dcbc]">

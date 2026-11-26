@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url"
 const require = createRequire(import.meta.url)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const dataDir = path.join(root, ".smoke-data")
+const printTraceFile = path.join(dataDir, "print-receipt.json")
 const vitePort = Number(process.env.SMOKE_VITE_PORT || 5199)
 const cdpPort = Number(process.env.SMOKE_CDP_PORT || 9450)
 const PASSWORD = "Smoke#2026pass"
@@ -371,6 +372,90 @@ function seedDatabase() {
   return { first, second, third, payslip, todayKey, expected }
 }
 
+function openReadOnlyDatabase() {
+  const { DatabaseSync } = require("node:sqlite")
+  return new DatabaseSync(path.join(dataDir, "hozor_ghiab.db"), { readOnly: true })
+}
+
+function readOpenShift(seed) {
+  const db = openReadOnlyDatabase()
+  try {
+    return (
+      db
+        .prepare(
+          `SELECT record_date, punch_in_at, punch_out_at
+           FROM attendance_records
+           WHERE employee_id = ? AND record_date = ?
+           LIMIT 1`
+        )
+        .get(seed.third.id, seed.todayKey) ?? null
+    )
+  } finally {
+    db.close()
+  }
+}
+
+function readAbsenceExpectation(seed) {
+  const db = openReadOnlyDatabase()
+  try {
+    const monthStart = `${seed.todayKey.slice(0, 7)}-01`
+    const presentDays = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM (
+             SELECT a.employee_id, a.record_date
+             FROM attendance_records a
+             JOIN employees e ON e.id = a.employee_id
+             WHERE a.record_date >= ? AND a.record_date <= ? AND a.punch_in_at IS NOT NULL AND e.is_active = 1
+             GROUP BY a.employee_id, a.record_date
+           )`
+        )
+        .get(monthStart, seed.todayKey).n
+    )
+    const activeEmployees = Number(db.prepare("SELECT COUNT(*) AS n FROM employees WHERE is_active = 1").get().n)
+    const workingDays = new Date().getDate()
+    const expectedDays = workingDays * activeEmployees
+    const absentDays = Math.max(0, expectedDays - presentDays)
+    return {
+      workingDays,
+      expectedDays,
+      presentDays,
+      leaveDays: 0,
+      absentDays,
+      rate: expectedDays > 0 ? Math.round((absentDays / expectedDays) * 1000) / 1000 : 0,
+      activeEmployees
+    }
+  } finally {
+    db.close()
+  }
+}
+
+function readPayslipExpectation(seed) {
+  const db = openReadOnlyDatabase()
+  try {
+    const row = db
+      .prepare(
+        `SELECT id, number, period_start, period_end, base_salary_minor, net_amount_minor,
+                overtime_minutes, overtime_amount_minor
+         FROM payslips WHERE number = ?`
+      )
+      .get(seed.payslip.number)
+    if (!row) throw new Error(`payslip ${seed.payslip.number} is missing from the smoke database`)
+    return {
+      id: String(row.id),
+      number: String(row.number),
+      periodStart: String(row.period_start),
+      periodEnd: String(row.period_end),
+      baseMinor: Number(row.base_salary_minor),
+      netMinor: Number(row.net_amount_minor),
+      overtimeMinutes: Number(row.overtime_minutes),
+      overtimeMinor: Number(row.overtime_amount_minor)
+    }
+  } finally {
+    db.close()
+  }
+}
+
 async function main() {
   fs.rmSync(path.join(root, ".smoke-tmp"), { recursive: true, force: true })
   const seed = seedDatabase()
@@ -387,7 +472,7 @@ async function main() {
       [`--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`],
       {
         shell: false,
-        env: { APPDATA: path.join(dataDir, "appdata") }
+        env: { APPDATA: path.join(dataDir, "appdata"), SMOKE_PRINT_TRACE: printTraceFile }
       }
     )
     pass("packaged build", "release/win-unpacked")
@@ -401,7 +486,7 @@ async function main() {
     pass("vite dev server", `http://127.0.0.1:${vitePort} (entry module pre-compiled)`)
 
     startProcess("electron", "npx", ["electron", ".", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${dataDir}`], {
-      env: { VITE_DEV_SERVER_URL: `http://127.0.0.1:${vitePort}/` }
+      env: { VITE_DEV_SERVER_URL: `http://127.0.0.1:${vitePort}/`, SMOKE_PRINT_TRACE: printTraceFile }
     })
   }
 
@@ -476,6 +561,72 @@ async function main() {
       pass("content security policy", "strict CSP meta present and assets load from the package")
     }
 
+    const kiosk = await evaluate(
+      client,
+      `(async () => {
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+        const text = () => document.body.innerText
+        const card = () => [...document.querySelectorAll("button")].find(node => (node.textContent || "").includes("SM-3"))
+        if (!card()) {
+          const nav = [...document.querySelectorAll("button, a")].find(node =>
+            /تسجيل الحضور اليومي|ثبت حضور روزانه|Daily attendance/i.test((node.textContent || "").trim())
+          )
+          if (nav) {
+            nav.click()
+            await sleep(1500)
+          }
+        }
+        const employee = card()
+        if (!employee) return { error: "no-employee-card", text: text().slice(0, 200) }
+        employee.click()
+        await sleep(1500)
+        const startLabels = ["تسجيل دخول", "شروع شیفت", "Start shift"]
+        const punchIn = [...document.querySelectorAll("button")].find(
+          node => startLabels.includes((node.textContent || "").trim()) && !node.disabled
+        )
+        if (!punchIn) return { error: "no-punch-in", text: text().slice(0, 300) }
+        punchIn.click()
+        let afterIn = ""
+        for (let i = 0; i < 40; i += 1) {
+          await sleep(250)
+          afterIn = text()
+          if (/(على رأس العمل|در حال کار|Working)/i.test(afterIn)) break
+        }
+        return {
+          punchedIn: /(على رأس العمل|در حال کار|Working)/i.test(afterIn),
+          afterIn: afterIn.slice(0, 300)
+        }
+      })()`
+    )
+    if (kiosk?.error) fail("kiosk punch in", `${kiosk.error} :: ${kiosk.text ?? ""}`)
+    if (!kiosk.punchedIn) fail("kiosk punch in", "no working/break state after punch")
+
+    const persistedShift = readOpenShift(seed)
+    if (!persistedShift) {
+      const probe = openReadOnlyDatabase()
+      let dump
+      try {
+        dump = probe.prepare("SELECT employee_id, record_date, punch_in_at, punch_out_at, status FROM attendance_records").all()
+      } finally {
+        probe.close()
+      }
+      fail(
+        "kiosk punch in",
+        `no attendance row for SM-3 :: afterIn=${kiosk.afterIn} :: rows=${JSON.stringify(dump)}`
+      )
+    }
+    if (
+      persistedShift.punch_in_at === null ||
+      persistedShift.punch_in_at === undefined ||
+      persistedShift.punch_out_at !== null
+    ) {
+      fail("kiosk punch in", `database row is not an open shift: ${JSON.stringify(persistedShift)}`)
+    }
+    seed.expected.absence = readAbsenceExpectation(seed)
+    pass(
+      "kiosk punch in",
+      `SM-3 shift persisted to the smoke database on ${persistedShift.record_date} with punch_out_at null`
+    )
     const login = await evaluate(
       client,
       `(async () => {
@@ -665,43 +816,146 @@ async function main() {
       `${absence.absentDays}/${absence.expectedDays} absent days = ${absence.rate} (workingDays x activeEmployees)`
     )
 
-    const kiosk = await evaluate(
+    const payslip = await evaluate(
       client,
       `(async () => {
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-        const text = () => document.body.innerText
-        const cardVisible = () => [...document.querySelectorAll("button")].some(node => (node.textContent || "").includes("SM-3"))
-        if (!cardVisible()) {
-          const button = [...document.querySelectorAll("button, a")].find(node =>
-            /تسجيل الحضور اليومي|ثبت حضور روزانه|Daily attendance/i.test((node.textContent || "").trim())
-          )
-          if (button) {
-            button.click()
-            await sleep(1500)
+        const waitFor = async (finder, timeoutMs = 10000) => {
+          const deadline = Date.now() + timeoutMs
+          while (Date.now() < deadline) {
+            const found = finder()
+            if (found) return found
+            await sleep(250)
           }
+          return null
         }
-        const card = [...document.querySelectorAll("button")].find(node => (node.textContent || "").includes("SM-3"))
-        if (!card) return { error: "no-employee-card", text: text().slice(0, 200) }
-        card.click()
-        await sleep(1500)
-        const punchIn = [...document.querySelectorAll("button")].find(node =>
-          /(بدء|تسجيل الدخول|شروع|Start)/i.test((node.textContent || "").trim())
+        if (performance.timeOrigin !== ${boot.origin}) {
+          return { error: "renderer-reloaded", text: "document replaced mid-scenario; the admin session was lost" }
+        }
+        const dashboardNav = [...document.querySelectorAll("button, a")].find(node =>
+          /لوحة التحكم|لوحة الإدارة|Admin dashboard|Dashboard/i.test((node.textContent || "").trim())
         )
-        if (!punchIn) return { error: "no-punch-in", text: text().slice(0, 300) }
-        punchIn.click()
-        await sleep(1500)
-        const afterIn = text()
+        if (dashboardNav) {
+          dashboardNav.click()
+          await sleep(2000)
+        }
+        const panel = await waitFor(() => document.querySelector('[data-testid="payroll-cost-trend"]'))
+        if (!panel) return { error: "no-dashboard-panel", text: document.body.innerText.slice(0, 300) }
+        const viewAll = [...panel.querySelectorAll("button, a")].find(node =>
+          /عرض الكل|مشاهده همه|View all/i.test((node.textContent || "").trim())
+        )
+        if (!viewAll) return { error: "no-payroll-link", text: panel.innerText.slice(0, 200) }
+        viewAll.click()
+        const preview = await waitFor(() => [...document.querySelectorAll("button")].find(node => {
+          const label = (node.getAttribute("title") || "") + (node.getAttribute("aria-label") || "")
+          if (!/(معاينة|پیش‌نمایش|Preview)/i.test(label)) return false
+          let card = node.parentElement
+          for (let depth = 0; depth < 4 && card; depth += 1, card = card.parentElement) {
+            if ((card.textContent || "").includes(${JSON.stringify(seed.payslip.number)})) return true
+          }
+          return false
+        }))
+        if (!preview) return { error: "no-payslip-row", text: document.body.innerText.slice(0, 300) }
+        preview.click()
+        const dialog = await waitFor(() => document.querySelector('[data-testid="payslip-preview"]'))
+        if (!dialog) return { error: "no-preview-dialog", text: document.body.innerText.slice(0, 300) }
+        const attr = name => dialog.getAttribute("data-" + name)
+        const printButton = [...dialog.querySelectorAll("button")].find(node =>
+          /(طباعة|چاپ|Print)/i.test((node.textContent || "").trim())
+        )
         return {
-          punchedIn: /(استراحة|استراحت|Break|في العمل|در حال کار|working)/i.test(afterIn),
-          afterIn: afterIn.slice(0, 300),
-          controls: [...document.querySelectorAll("button, a")].map(node => (node.textContent || "").trim()).filter(Boolean).slice(0, 25)
+          fromDashboard: Boolean(panel && viewAll),
+          dialogOpen: true,
+          attrs: {
+            id: attr("payslip-id"),
+            number: attr("payslip-number"),
+            periodStart: attr("period-start"),
+            periodEnd: attr("period-end"),
+            baseMinor: Number(attr("base-minor")),
+            netMinor: Number(attr("net-minor")),
+            overtimeMinutes: Number(attr("overtime-minutes")),
+            overtimeMinor: Number(attr("overtime-minor"))
+          },
+          printButtonEnabled: Boolean(printButton && !printButton.disabled)
         }
       })()`
     )
-    if (kiosk?.error) fail("kiosk punch in", `${kiosk.error} :: ${kiosk.text ?? ""}`)
-    if (!kiosk.punchedIn) fail("kiosk punch in", "no working/break state after punch")
-    pass("kiosk punch in", "employee SM-3 started a shift through the real IPC path")
+    if (payslip?.error) fail("payslip preview", `${payslip.error} :: ${payslip.text ?? ""}`)
+    if (!payslip.fromDashboard) fail("payslip preview", "payroll was not opened from the dashboard panel")
+    if (!payslip.dialogOpen) fail("payslip preview", "preview dialog did not open")
+    if (!payslip.printButtonEnabled) fail("payslip preview", "print button missing or disabled")
 
+    const expectedSlip = readPayslipExpectation(seed)
+    const slipFields = ["id", "number", "periodStart", "periodEnd", "baseMinor", "netMinor", "overtimeMinutes", "overtimeMinor"]
+    for (const field of slipFields) {
+      if (payslip.attrs[field] !== expectedSlip[field]) {
+        fail(
+          "payslip preview",
+          `${field}: dialog shows ${JSON.stringify(payslip.attrs[field])} but the SQL payslip says ${JSON.stringify(expectedSlip[field])}`
+        )
+      }
+    }
+    pass(
+      "payslip preview",
+      `${expectedSlip.number} ${expectedSlip.periodStart} -> ${expectedSlip.periodEnd} net ${expectedSlip.netMinor} equals the SQL payslip`
+    )
+
+    const printAction = await evaluate(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="payslip-preview"]')
+        if (!dialog) return { clicked: false, reason: "no-dialog" }
+        const button = [...dialog.querySelectorAll("button")].find(node =>
+          /(طباعة|چاپ|Print)/i.test((node.textContent || "").trim())
+        )
+        if (!button) return { clicked: false, reason: "no-print-button" }
+        button.click()
+        return { clicked: true }
+      })()`
+    )
+    if (!printAction?.clicked) fail("print request", `print button could not be clicked (${printAction?.reason ?? "unknown"})`)
+
+    const receipt = await waitFor(
+      () => {
+        if (!fs.existsSync(printTraceFile)) return null
+        try {
+          return JSON.parse(fs.readFileSync(printTraceFile, "utf8"))
+        } catch {
+          return null
+        }
+      },
+      "print receipt from the main process",
+      20_000
+    )
+    if (receipt.payslipId !== expectedSlip.id || receipt.payslipNumber !== expectedSlip.number) {
+      fail("print request", `main received ${JSON.stringify(receipt)} but expected ${expectedSlip.number}`)
+    }
+    if (receipt.success !== true || !(receipt.bytes > 1000)) {
+      fail("print request", `handler did not produce a printable document: ${JSON.stringify(receipt)}`)
+    }
+    const printPdfPath = `${printTraceFile}.pdf`
+    if (!fs.existsSync(printPdfPath) || fs.statSync(printPdfPath).size !== receipt.bytes) {
+      fail("print request", "the PDF bytes recorded by the handler are missing on disk")
+    }
+    pass(
+      "print request",
+      `main handler received print:payslip for ${receipt.payslipNumber} and produced ${receipt.bytes} bytes`
+    )
+
+    await sleep(1200)
+    const printFeedback = await evaluate(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="payslip-preview"]')
+        const errorBanner = [...document.querySelectorAll('[role="status"]')].some(node =>
+          /خطأ|خطا|error|failed|تعذر|ناموفق/i.test(node.innerText || "")
+        )
+        return { dialogOpen: Boolean(dialog), errorBanner }
+      })()`
+    )
+    if (!printFeedback.dialogOpen) fail("print response", "preview dialog closed unexpectedly after printing")
+    if (printFeedback.errorBanner) fail("print response", "renderer surfaced an error after the print request")
+    pass("print response", "renderer kept the preview open with no error feedback")
     const report = await evaluate(
       client,
       `(async () => {
@@ -741,62 +995,6 @@ async function main() {
       fail("attendance report", `${report.tableRows} table rows, completed=${report.completedRows}, summary=${report.summaryLine ?? "none"}`)
     }
     pass("attendance report", `${report.completedRows} rows with worked hours=${report.showsWorkedHours} (${report.summaryLine ?? "no summary"})`)
-
-    const payroll = await evaluate(
-      client,
-      `(async () => {
-        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-        const waitFor = async (finder, timeoutMs = 8000) => {
-          const deadline = Date.now() + timeoutMs
-          while (Date.now() < deadline) {
-            const found = finder()
-            if (found) return found
-            await sleep(250)
-          }
-          return null
-        }
-        if (performance.timeOrigin !== ${boot.origin}) {
-          return { error: "renderer-reloaded", text: "document replaced mid-scenario; the admin session was lost" }
-        }
-        const nav = await waitFor(() => [...document.querySelectorAll("button, a")].find(node =>
-          /فیش‌های حقوق|كشوف الرواتب|Payroll/i.test((node.textContent || "").trim())
-        ))
-        if (!nav) return { error: "no-payroll-nav", text: document.body.innerText.slice(0, 200) }
-        nav.click()
-        const preview = await waitFor(() => [...document.querySelectorAll("button")].find(node =>
-          /(معاينة|پیش‌نمایش|Preview)/i.test((node.getAttribute("title") || "") + (node.textContent || "")) ||
-          /(معاينة|پیش‌نمایش|Preview)/i.test(node.getAttribute("aria-label") || "")
-        ))
-        if (!preview) return { error: "no-preview-button", text: document.body.innerText.slice(0, 300) }
-        preview.click()
-        const dialog = await waitFor(() => {
-          const node = document.querySelector('[role="dialog"]')
-          if (!node) return null
-          const hasPrint = [...node.querySelectorAll("button")].some(button =>
-            /(طباعة|چاپ|Print)/i.test((button.textContent || "").trim())
-          )
-          return hasPrint ? node : null
-        })
-        if (!dialog) return { error: "no-preview-dialog", text: document.body.innerText.slice(0, 300) }
-        const printButton = [...document.querySelectorAll('[role="dialog"] button')].find(node =>
-          /(طباعة|چاپ|Print)/i.test((node.textContent || "").trim())
-        )
-        return {
-          dialogOpen: Boolean(dialog),
-          showsNet: Boolean(dialog && (dialog.innerText.includes("602") || /\\d+\\.\\d{3}/.test(dialog.innerText))),
-          printButtonEnabled: Boolean(printButton && !printButton.disabled),
-          printBridge: typeof window.api.print.payslip === "function" && typeof window.api.print.payslipPdf === "function",
-          printableLayout: Boolean(dialog && dialog.querySelector(".print\\\\:hidden, [class*='print:']"))
-        }
-      })()`
-    )
-    if (payroll?.error) fail("payslip preview", `${payroll.error} :: ${payroll.text ?? ""}`)
-    if (!payroll.dialogOpen) fail("payslip preview", "preview dialog did not open")
-    if (!payroll.showsNet) fail("payslip preview", "net amount not rendered")
-    if (!payroll.printButtonEnabled) fail("payslip preview", "print button missing or disabled")
-    if (!payroll.printBridge) fail("print bridge", "print IPC methods missing")
-    pass("payslip preview", "dialog, net amount and enabled print button")
-    pass("print bridge", "print + printToPDF channels exposed")
 
     const consoleErrors = client.consoleErrors.filter(message => !/Download the React DevTools/i.test(message))
     if (consoleErrors.length > 0) fail("renderer console", consoleErrors.slice(0, 3).join(" | "))

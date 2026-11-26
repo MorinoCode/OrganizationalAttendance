@@ -72,7 +72,7 @@ contextBridge.exposeInMainWorld("api", {
     restoreAuto: (fileName, token) => invoke("backup:restore-auto", { fileName }, token)
   },
   print: {
-    payslip: token => invoke("print:payslip", {}, token),
+    payslip: (data, token) => invoke("print:payslip", data, token),
     payslipPdf: token => invoke("print:payslip-pdf", {}, token)
   },
   exporter: {

@@ -391,8 +391,24 @@ function registerIpcHandlers({ getMainWindow }) {
     return { canceled: Boolean(session) }
   }, { requiresAuth: true })
 
-  handle("print:payslip", async () => {
+  handle("print:payslip", async (data = {}) => {
     const win = getWindow(getMainWindow)
+    const traceFile = process.env.SMOKE_PRINT_TRACE
+    if (traceFile) {
+      const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: "A4", preferCSSPageSize: true })
+      const receipt = {
+        payslipId: data?.payslipId ?? null,
+        payslipNumber: data?.payslipNumber ?? null,
+        success: pdf.length > 0,
+        mode: "pdf-smoke",
+        bytes: pdf.length,
+        at: new Date().toISOString()
+      }
+      fs.mkdirSync(path.dirname(traceFile), { recursive: true })
+      fs.writeFileSync(`${traceFile}.pdf`, pdf)
+      fs.writeFileSync(traceFile, JSON.stringify(receipt))
+      return { success: receipt.success, reason: null, mode: receipt.mode, bytes: receipt.bytes }
+    }
     return new Promise(resolve => {
       win.webContents.print({ silent: false, printBackground: true }, (success, reason) => {
         resolve({ success, reason: reason || null })

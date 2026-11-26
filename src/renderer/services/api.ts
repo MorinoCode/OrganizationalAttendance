@@ -93,7 +93,10 @@ interface Bridge {
     restoreAuto(fileName: string, token: string | null): Promise<Envelope<RestoreSnapshotResult>>
   }
   print: {
-    payslip(token: string | null): Promise<Envelope<{ success: boolean; reason: string | null }>>
+    payslip(
+      data: { payslipId?: string; payslipNumber?: string },
+      token: string | null
+    ): Promise<Envelope<{ success: boolean; reason: string | null; mode?: string; bytes?: number }>>
     payslipPdf(token: string | null): Promise<Envelope<{ canceled: boolean; filePath?: string }>>
   }
   exporter: {
@@ -226,7 +229,8 @@ export const api = {
     restoreAuto: (fileName: string) => unwrap(bridge().backup.restoreAuto(fileName, sessionToken))
   },
   print: {
-    payslip: () => unwrap(bridge().print.payslip(sessionToken)),
+    payslip: (data: { payslipId?: string; payslipNumber?: string } = {}) =>
+      unwrap(bridge().print.payslip(data, sessionToken)),
     payslipPdf: () => unwrap(bridge().print.payslipPdf(sessionToken))
   },
   exporter: {

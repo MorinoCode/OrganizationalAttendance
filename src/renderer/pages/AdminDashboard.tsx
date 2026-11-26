@@ -77,11 +77,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBack
   }, [tab, onSessionEnded, t])
 
   const tabs: Array<{ id: AdminTab; label: string; icon: React.ReactNode }> = [
-    { id: "overview", label: t("admin.overview"), icon: <LayoutDashboard className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "employees", label: t("admin.employees"), icon: <Users className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "attendance", label: t("admin.attendance"), icon: <Clock className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "payroll", label: t("admin.payroll"), icon: <FileText className="h-3.5 w-3.5" aria-hidden /> },
-    { id: "settings", label: t("admin.settings"), icon: <Settings className="h-3.5 w-3.5" aria-hidden /> }
+    { id: "overview", label: t("admin.overview"), icon: <LayoutDashboard className="h-4 w-4" aria-hidden /> },
+    { id: "employees", label: t("admin.employees"), icon: <Users className="h-4 w-4" aria-hidden /> },
+    { id: "attendance", label: t("admin.attendance"), icon: <Clock className="h-4 w-4" aria-hidden /> },
+    { id: "payroll", label: t("admin.payroll"), icon: <FileText className="h-4 w-4" aria-hidden /> },
+    { id: "settings", label: t("admin.settings"), icon: <Settings className="h-4 w-4" aria-hidden /> }
   ]
 
   const statCells = [
@@ -148,34 +148,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onBack
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[color:var(--line)] pb-0 no-print">
-        <div role="tablist" aria-label={t("admin.dashboard")} className="flex flex-wrap items-center gap-1">
-          {tabs.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
-              className={`relative flex items-center gap-2 px-3.5 pb-3 pt-2 text-[0.78rem] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(214,171,91,0.45)] ${
-                tab === item.id ? "text-[#f8efd8]" : "text-[#8d8275] hover:text-[#ded4c6]"
-              }`}
-            >
-              <span className={tab === item.id ? "text-[#d6ab5b]" : "text-[#6b6054]"}>{item.icon}</span>
-              <span>{item.label}</span>
-              <span
-                className={`absolute inset-x-2 -bottom-px h-[2px] rounded-full transition-opacity ${
-                  tab === item.id
-                    ? "bg-[linear-gradient(90deg,rgba(214,171,91,0),#d6ab5b,rgba(214,171,91,0))] opacity-100"
-                    : "opacity-0"
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[color:var(--line)] pb-4 no-print">
+        <div role="tablist" aria-label={t("admin.dashboard")} className="flex flex-wrap items-center gap-2 rounded-2xl bg-[rgba(20,17,13,0.85)] p-1.5 border border-[rgba(214,186,140,0.18)] shadow-inner">
+          {tabs.map(item => {
+            const isActive = tab === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setTab(item.id)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[0.82rem] font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(214,171,91,0.5)] ${
+                  isActive
+                    ? "bg-gradient-to-b from-[#d6ab5b] to-[#b8862f] text-[#1a1305] shadow-[0_12px_24px_-12px_rgba(214,171,91,0.85),inset_0_1px_0_rgba(255,255,255,0.35)] border border-[rgba(255,246,230,0.25)]"
+                    : "text-[#c0b4a3] hover:text-[#f4ece0] hover:bg-[rgba(255,246,230,0.06)] border border-transparent"
                 }`}
-                aria-hidden
-              />
-            </button>
-          ))}
+              >
+                <span className={isActive ? "text-[#1a1305]" : "text-[#d6ab5b]"}>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </div>
 
-        <div className="flex items-center gap-2 pb-2">
+        <div className="flex items-center gap-2">
           <button type="button" onClick={onBackToKiosk} className="btn btn-ghost">
             <ArrowLeft className="h-4 w-4 text-[#d6ab5b] rtl:rotate-180" aria-hidden />
             <span>{t("kiosk.title")}</span>

@@ -320,13 +320,13 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
     }
   }
 
-  const handlePrint = async () => {
+  const handlePrint = async (slip?: Payslip) => {
     if (!isDesktopRuntime()) {
       window.print()
       return
     }
     try {
-      await api.print.payslip()
+      await api.print.payslip(slip ? { payslipId: slip.id, payslipNumber: slip.number } : {})
     } catch (caught) {
       handleError(caught)
     }
@@ -461,7 +461,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
               </button>
               <button
                 type="button"
-                onClick={() => void handlePrint()}
+                onClick={() => void handlePrint(selectedPayslip)}
                 className="btn btn-ghost"
               >
                 <Printer className="h-4 w-4 text-blue-400" aria-hidden />
@@ -1180,7 +1180,7 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
         settings={settings}
         isOpen={previewPayslip !== null}
         onClose={() => setPreviewPayslip(null)}
-        onPrint={() => void handlePrint()}
+        onPrint={() => void handlePrint(previewPayslip ?? undefined)}
         onSavePdf={() => void handleSavePdf()}
         onSendWhatsApp={slip => handleSendWhatsAppForSlip(slip)}
       />
