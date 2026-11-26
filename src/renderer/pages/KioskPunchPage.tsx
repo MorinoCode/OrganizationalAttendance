@@ -411,10 +411,6 @@ export const KioskPunchPage: React.FC<KioskPunchPageProps> = ({ onOpenAdmin }) =
                     <span className="text-[1.05rem] font-bold tracking-tight">{t("kiosk.finishShift")}</span>
                   </button>
                 </div>
-
-                <p className="text-[0.66rem] leading-relaxed text-[#6b6054]">
-                  {settings?.companyName} · {settings?.currency} · {t("appTitle")}
-                </p>
               </div>
             </>
           ) : (
