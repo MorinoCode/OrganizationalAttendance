@@ -599,6 +599,82 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
       <div className="panel p-7">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] pb-4">
           <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-[#d6ab5b]" aria-hidden />
+            <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.updater.title")}</h2>
+          </div>
+          <span className="rounded-md border border-[color:var(--line)] bg-[rgba(255,246,230,0.04)] px-2.5 py-1 font-mono text-xs font-semibold text-[#e6c98a]">
+            v{info?.version ?? "1.1.0"}
+          </span>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <p className="text-xs text-slate-400">{t("settings.updater.subtitle")}</p>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.5)] p-4 text-xs">
+            <div className="space-y-1">
+              <span className="font-semibold text-slate-200">
+                {updaterState.status === "checking" && t("settings.updater.checking")}
+                {updaterState.status === "available" && t("settings.updater.available", { version: updaterState.version })}
+                {updaterState.status === "downloading" && t("settings.updater.downloading", { percent: updaterState.percent ?? 0 })}
+                {updaterState.status === "downloaded" && t("settings.updater.ready")}
+                {updaterState.status === "not-available" && t("settings.updater.upToDate")}
+                {updaterState.status === "development" && t("settings.updater.devMode")}
+                {updaterState.status === "not-configured" && t("settings.updater.notConfigured")}
+                {updaterState.status === "error" && (updaterState.error || t("settings.updater.failed"))}
+                {updaterState.status === "idle" && t("settings.updater.idle")}
+              </span>
+              {updaterState.status === "downloading" && (
+                <div className="h-2 w-48 overflow-hidden rounded-full bg-[rgba(255,246,230,0.08)]">
+                  <div
+                    className="h-full rounded-full bg-[#78dcbc] transition-all duration-300"
+                    style={{ width: `${updaterState.percent ?? 0}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {updaterState.status === "available" && (
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadUpdate()}
+                  className="btn border border-[rgba(70,195,159,0.4)] bg-[rgba(43,166,136,0.2)] text-[#78dcbc] hover:bg-[rgba(43,166,136,0.3)]"
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  <span>{t("settings.updater.downloadButton")}</span>
+                </button>
+              )}
+              {updaterState.status === "downloaded" && (
+                <button
+                  type="button"
+                  onClick={() => void handleInstallUpdate()}
+                  className="btn btn-primary"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                  <span>{t("settings.updater.installButton")}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleCheckUpdate()}
+                disabled={checkingUpdate || updaterState.status === "downloading" || updaterState.status === "not-configured"}
+                className="btn btn-ghost"
+              >
+                {checkingUpdate ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 text-[#d6ab5b]" aria-hidden />
+                )}
+                <span>{t("settings.updater.checkButton")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel p-7">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] pb-4">
+          <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-[#78dcbc]" aria-hidden />
             <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.backupTitle")}</h2>
           </div>
@@ -722,82 +798,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSessionE
               {busy === "choose-backup" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4 text-blue-400" aria-hidden />}
               <span>{t("settings.restoreBackup")}</span>
             </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel p-7">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] pb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#d6ab5b]" aria-hidden />
-            <h2 className="text-lg font-semibold tracking-tight text-[#f4ece0]">{t("settings.updater.title")}</h2>
-          </div>
-          <span className="rounded-md border border-[color:var(--line)] bg-[rgba(255,246,230,0.04)] px-2.5 py-1 font-mono text-xs font-semibold text-[#e6c98a]">
-            v{info?.version ?? "1.1.0"}
-          </span>
-        </div>
-
-        <div className="mt-5 space-y-4">
-          <p className="text-xs text-slate-400">{t("settings.updater.subtitle")}</p>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--line)] bg-[rgba(11,10,8,0.5)] p-4 text-xs">
-            <div className="space-y-1">
-              <span className="font-semibold text-slate-200">
-                {updaterState.status === "checking" && t("settings.updater.checking")}
-                {updaterState.status === "available" && t("settings.updater.available", { version: updaterState.version })}
-                {updaterState.status === "downloading" && t("settings.updater.downloading", { percent: updaterState.percent ?? 0 })}
-                {updaterState.status === "downloaded" && t("settings.updater.ready")}
-                {updaterState.status === "not-available" && t("settings.updater.upToDate")}
-                {updaterState.status === "development" && t("settings.updater.devMode")}
-                {updaterState.status === "not-configured" && t("settings.updater.notConfigured")}
-                {updaterState.status === "error" && (updaterState.error || t("settings.updater.failed"))}
-                {updaterState.status === "idle" && t("settings.updater.idle")}
-              </span>
-              {updaterState.status === "downloading" && (
-                <div className="h-2 w-48 overflow-hidden rounded-full bg-[rgba(255,246,230,0.08)]">
-                  <div
-                    className="h-full rounded-full bg-[#78dcbc] transition-all duration-300"
-                    style={{ width: `${updaterState.percent ?? 0}%` }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {updaterState.status === "available" && (
-                <button
-                  type="button"
-                  onClick={() => void handleDownloadUpdate()}
-                  className="btn border border-[rgba(70,195,159,0.4)] bg-[rgba(43,166,136,0.2)] text-[#78dcbc] hover:bg-[rgba(43,166,136,0.3)]"
-                >
-                  <Download className="h-3.5 w-3.5" aria-hidden />
-                  <span>{t("settings.updater.downloadButton")}</span>
-                </button>
-              )}
-              {updaterState.status === "downloaded" && (
-                <button
-                  type="button"
-                  onClick={() => void handleInstallUpdate()}
-                  className="btn btn-primary"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                  <span>{t("settings.updater.installButton")}</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void handleCheckUpdate()}
-                disabled={checkingUpdate || updaterState.status === "downloading" || updaterState.status === "not-configured"}
-                className="btn btn-ghost"
-              >
-                {checkingUpdate ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5 text-[#d6ab5b]" aria-hidden />
-                )}
-                <span>{t("settings.updater.checkButton")}</span>
-              </button>
-            </div>
           </div>
         </div>
       </div>
