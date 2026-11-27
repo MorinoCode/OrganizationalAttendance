@@ -6,6 +6,20 @@ const { app, BrowserWindow, dialog, nativeTheme, session, shell } = require("ele
 
 nativeTheme.themeSource = "dark"
 
+process.on("uncaughtException", error => {
+  console.error("[main] uncaughtException:", error)
+  try {
+    dialog.showErrorBox(
+      "خطای سیستمی / System Error",
+      `${error?.name || "Error"}: ${error?.message || String(error)}`
+    )
+  } catch {}
+})
+
+process.on("unhandledRejection", reason => {
+  console.error("[main] unhandledRejection:", reason)
+})
+
 const { initDatabase, closeDatabase, getDatabasePath } = require("./db/index.cjs")
 const { registerIpcHandlers, cancelActiveExports, discardActiveExports } = require("./ipc.cjs")
 const exportJournal = require("./exportJournal.cjs")
