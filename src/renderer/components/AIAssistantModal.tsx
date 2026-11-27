@@ -21,7 +21,8 @@ interface AIAssistantModalProps {
 
 export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose }) => {
   const { t, i18n } = useTranslation()
-  const lang = (i18n.language || "fa") as Language
+  const rawLang = i18n.language || "ar"
+  const lang: Language = rawLang.startsWith("en") ? "en" : rawLang.startsWith("fa") ? "fa" : "ar"
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
@@ -41,38 +42,38 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
     time: currentTimeStr(),
     suggestions: [
       lang === "fa"
-        ? "نحوه ثبت تردد و وقت استراحت پرسنل چگونه است؟"
+        ? "نحوه ثبت تردد و وقت استراحت در کیوسک چگونه است؟"
         : lang === "ar"
-          ? "كيف يتم تسجيل الحضور وأوقات الاستراحة؟"
-          : "How do attendance and breaks work?",
+          ? "كيف يتم تسجيل الحضور وأوقات الاستراحة في الكشك؟"
+          : "How do attendance punch-in and break tracking work in the Kiosk?",
+      lang === "fa"
+        ? "آیا پرسنل می‌توانند در یک روز چند شیفت کاری ثبت کنند؟"
+        : lang === "ar"
+          ? "هل يمكن للموظف تسجيل أكثر من وردية في نفس اليوم؟"
+          : "Can employees log multiple or split shifts on the same day?",
       lang === "fa"
         ? "محاسبه حقوق و اضافه‌کاری چگونه انجام می‌شود؟"
         : lang === "ar"
           ? "كيف يتم احتساب الراتب والعمل الإضافي؟"
-          : "How are salary and overtime calculated?",
+          : "How are employee salaries, worked hours, and overtime calculated?",
       lang === "fa"
-        ? "خروجی فایل اکسل شامل چه مواردی است؟"
+        ? "خروجی فایل اکسل چه مواردی را شامل می‌شود؟"
         : lang === "ar"
-          ? "ماذا يتضمن ملف تقرير Excel الصادر؟"
-          : "What is included in the exported Excel spreadsheet?",
-      lang === "fa"
-        ? "امنیت داده‌ها و پشتیبان‌گیری آفلاین چگونه است؟"
-        : lang === "ar"
-          ? "ما هي معايير الأمان والنسخ الاحتياطي؟"
-          : "How does offline data storage and backups work?"
+          ? "ماذا تتضمن ملفات Excel المصدرة؟"
+          : "What is included in the exported Excel workbooks?"
     ]
   })
 
   useEffect(() => {
     if (!isOpen) return
-    if (messages.length === 0) {
+    if (messages.length === 0 || (messages.length === 1 && messages[0].id === "welcome")) {
       setMessages([defaultWelcomeMessage()])
     }
     const timer = setTimeout(() => {
       inputRef.current?.focus()
     }, 100)
     return () => clearTimeout(timer)
-  }, [isOpen])
+  }, [isOpen, lang])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
