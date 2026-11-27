@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, CheckCircle2, DatabaseZap, Loader2, X } from "lucide-react"
 
@@ -50,8 +51,14 @@ export const RestorePreviewDialog: React.FC<RestorePreviewDialogProps> = ({
     { label: t("settings.backupCountPayslips"), value: preview.counts.payslips }
   ]
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.72)] p-4 backdrop-blur-sm">
+  const dialog = (
+    <div
+      role="presentation"
+      onClick={event => {
+        if (event.target === event.currentTarget && !busy) onCancel()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.72)] p-4 backdrop-blur-sm"
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -158,4 +165,9 @@ export const RestorePreviewDialog: React.FC<RestorePreviewDialogProps> = ({
       </div>
     </div>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(dialog, document.body)
+  }
+  return dialog
 }

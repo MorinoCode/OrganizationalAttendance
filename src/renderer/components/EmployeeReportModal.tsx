@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { FileSpreadsheet, Loader2, Printer, X } from "lucide-react"
 
@@ -32,6 +33,15 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!employee || !isOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) onClose()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [employee, isOpen, loading, onClose])
 
   useEffect(() => {
     if (!employee || !isOpen) return
@@ -93,8 +103,13 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm"
+      onClick={e => {
+        if (e.target === e.currentTarget && !loading) onClose()
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -252,6 +267,7 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

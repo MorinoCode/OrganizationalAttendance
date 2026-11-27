@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, X } from "lucide-react"
 
@@ -40,8 +41,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   if (!isOpen) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.72)] p-4 backdrop-blur-sm">
+  const dialog = (
+    <div
+      role="presentation"
+      onClick={event => {
+        if (event.target === event.currentTarget && !busy) onCancel()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.72)] p-4 backdrop-blur-sm"
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -103,4 +110,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       </div>
     </div>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(dialog, document.body)
+  }
+  return dialog
 }

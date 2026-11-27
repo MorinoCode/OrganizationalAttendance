@@ -1,4 +1,5 @@
 import React, { useEffect } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { CheckCircle2, Download, MessageCircle, Printer, X } from "lucide-react"
 import { formatDate, formatDateTime, formatDuration } from "../services/date"
@@ -42,8 +43,13 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
 
   const money = (minor: number) => formatMoney(minor, settings.currency, settings.currencyDecimals, lang)
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.85)] p-4 backdrop-blur-md">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.85)] p-4 backdrop-blur-md"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -272,6 +278,7 @@ export const PayslipPreviewModal: React.FC<PayslipPreviewModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

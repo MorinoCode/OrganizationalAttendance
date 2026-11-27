@@ -406,7 +406,8 @@ function deleteEmployee(id, actor) {
 
     const payslips = db.prepare("SELECT COUNT(*) AS total FROM payslips WHERE employee_id = ?").get(existing.id).total
     const attendance = db.prepare("SELECT COUNT(*) AS total FROM attendance_records WHERE employee_id = ?").get(existing.id).total
-    if (Number(payslips) > 0 || Number(attendance) > 0) {
+    const leaves = db.prepare("SELECT COUNT(*) AS total FROM leaves WHERE employee_id = ?").get(existing.id).total
+    if (Number(payslips) > 0 || Number(attendance) > 0 || Number(leaves) > 0) {
       throw appError("employee_has_history", "Employees with payroll or attendance history cannot be deleted.")
     }
 

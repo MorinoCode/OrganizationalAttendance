@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { AlertCircle, KeyRound, Lock, ShieldAlert, User, X } from "lucide-react"
 import { useAppStore } from "../store/useAppStore"
@@ -122,8 +123,13 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({ isOpen, 
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm"
+      onClick={e => {
+        if (e.target === e.currentTarget && !busy) onClose()
+      }}
+    >
       <div role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" className="panel w-full max-w-sm overflow-hidden">
         <div className="h-px w-full bg-[linear-gradient(90deg,rgba(214,171,91,0),rgba(214,171,91,0.9),rgba(214,171,91,0))]" />
         <div className="p-6">
@@ -307,6 +313,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({ isOpen, 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

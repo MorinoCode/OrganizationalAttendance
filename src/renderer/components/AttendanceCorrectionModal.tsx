@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, X } from "lucide-react"
 
@@ -73,8 +74,14 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm">
+  const modal = (
+    <div
+      role="presentation"
+      onClick={event => {
+        if (event.target === event.currentTarget && !busy) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm"
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -182,4 +189,9 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
       </div>
     </div>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(modal, document.body)
+  }
+  return modal
 }

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
@@ -102,6 +103,15 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState<{ id: string; written: number; total: number } | null>(null)
   const exportIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!form) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) setForm(null)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [form, saving])
 
   useEffect(() => {
     try {
@@ -848,8 +858,13 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
         </div>
       </div>
 
-      {form && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm">
+      {form && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,5,4,0.74)] p-4 backdrop-blur-sm"
+          onClick={e => {
+            if (e.target === e.currentTarget && !saving) setForm(null)
+          }}
+        >
           <div
             role="dialog"
             aria-modal="true"
@@ -1161,7 +1176,8 @@ export const PayrollPage: React.FC<PayrollPageProps> = ({ settings, onSessionEnd
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmDialog
